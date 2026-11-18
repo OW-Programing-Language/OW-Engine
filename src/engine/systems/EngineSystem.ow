@@ -1,0 +1,4 @@
+# Gameplay systems are independent of graphics backend and flOW lifecycle.
+interface EngineSystem:
+  fn name()
+  fn update(scenes, components, delta_ms)

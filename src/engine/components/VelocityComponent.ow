@@ -1,0 +1,19 @@
+# Linear velocity measured in world units per second.
+class VelocityComponent:
+  field x
+  field y
+  field z
+
+  fn new(vx, vy, vz):
+    set this.x: vx
+    set this.y: vy
+    set this.z: vz
+
+  fn set(vx, vy, vz):
+    set this.x: vx
+    set this.y: vy
+    set this.z: vz
+    return: 1
+
+  fn vector():
+    return: [this.x, this.y, this.z]

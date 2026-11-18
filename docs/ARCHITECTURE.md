@@ -14,14 +14,21 @@ src/
     entities/EntityStore.ow       - entity registry, coordinates and lifecycle
     scenes/Scene.ow               - entity membership and tick state
     scenes/SceneManager.ow        - scene switching + spawn/destroy operations
-    runtime/FixedStepLoop.ow      - capped deterministic fixed-step scheduler
+    components/ComponentStore.ow - bounded entity component storage
+    components/ComponentRegistry.ow - extensible ECS registry
+    components/{TransformComponent,VelocityComponent}.ow
+    systems/{EngineSystem,SystemRegistry,MovementSystem}.ow
+    runtime/FixedStepLoop.ow      - capped deterministic fixed-step scheduler and optional gameplay systems
     modules/EngineEntitiesModule.ow
     modules/EngineScenesModule.ow
     modules/EngineRuntimeModule.ow
+    modules/{EngineComponentsModule,EngineSystemsModule}.ow
   main.ow                         - headless composition root
 tests/
   headless_engine.ow              - state, scene, scheduler, flOW contracts
   headless_graphics.ow            - dependency and headless-renderer integration
+  headless_ecs.ow                 - ECS lifecycle, movement, ticks and cleanup
+examples/ecs_motion/main.ow      - playable state-only movement demonstration
 ```
 
 Service dependencies:
@@ -29,6 +36,8 @@ Service dependencies:
 ```text
 engine.runtime -> ENGINE_SCENES (scenes)
 engine.scenes  -> ENGINE_ENTITIES (entities)
+engine.components -> ENGINE_ENTITIES (entities)
+engine.systems  -> ENGINE_COMPONENTS (components), ENGINE_SCENES (scenes)
 engine.entities -> no requirements
 
 Graphics.HeadlessRenderer -> GRAPHICS_RENDERER (renderer), independent
@@ -43,7 +52,18 @@ All modules are flOW classic `Module` implementations, register their services u
 - `update(-1)` returns -1. Other calls return the number of executed ticks.
 - Only the active scene advances; inactive scenes retain state.
 - Entity IDs never alias a destroyed entity. Storage is bounded and does not reuse slots in v0.1.
-- Entity deletion removes the ID from all scenes.
+- Entity deletion removes the ID from all scenes. Once `scenes.attach_components(components)` is called, it also cleans every component store for that entity.
+- The optional `runtime.attach_systems(systems, components)` runs enabled systems before each active scene tick; existing v0.1 code remains unaffected.
+
+### ECS semantics
+
+- Component stores are indexed by monotonically increasing entity IDs, allowing deterministic O(1) component lookups and no accidental reattachment to stale IDs.
+- The registry provides named component types and generic `put/get/has/remove` operations; `get` returns `0` for absent values.
+- Built-in `TransformComponent` stores translation, Euler rotation and scale. `VelocityComponent` stores velocity in world units per second.
+- `MovementSystem` iterates **active-scene entities only** and updates transforms using `delta_ms / 1000.0` seconds.
+- `SystemRegistry` keeps systems in insertion order, enforces unique names, and supports enable/disable.
+- The ECS registry mirrors its transform writes into the legacy `EntityStore` position fields. Direct legacy writes do not flow back into ECS components.
+- No component persistence, archetype query optimizer, transform parenting, multithreading or physics is claimed at this stage.
 
 ### Graphics integration
 
@@ -51,8 +71,9 @@ All modules are flOW classic `Module` implementations, register their services u
 
 ## Milestones
 
-- **Phase 1 (this PR):** flOW modules, entity registry, named scenes, deterministic fixed-step loop, headless tests, CI.
-- **Phase 2:** component stores and transform hierarchy, scriptable systems, lifecycle events, event bus and save/load contracts.
+- **Phase 1 (merged):** flOW modules, entity registry, named scenes, deterministic fixed-step loop, headless tests, CI.
+- **Phase 2a (this PR):** ECS component stores, transforms / velocities, movement systems, flOW service integration and deterministic headless tests.
+- **Phase 2b:** transform parent/child hierarchy, lifecycle events and event bus, system dependency ordering, component save/load contracts.
 - **Phase 3:** render-world adapter over OW Graphics (camera, mesh, materials, scene submission), headless + Mesa integration tests.
 - **Phase 4:** input action mapping, collision/physics abstractions, asset lifecycle, game window loop.
 - **Phase 5:** voxel chunks, meshing, procedural terrain, streaming, networking and an OWCraft demonstrator.

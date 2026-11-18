@@ -50,6 +50,14 @@ jobs:
           java -jar ../ow-lang/target/OwIDE.jar check tests/headless_engine.ow
           java -jar ../ow-lang/target/OwIDE.jar run tests/headless_engine.ow
 
+      - name: Verify ECS component stores and system scheduling
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check examples/ecs_motion/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar run examples/ecs_motion/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_ecs.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_ecs.ow
+
       - name: Verify OW Graphics headless integration
         working-directory: ow-engine
         run: |

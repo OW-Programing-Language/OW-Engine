@@ -42,7 +42,7 @@ main:
   call: assert(runtime.update(15) == 0, "wait for full fixed step")
   call: assert(runtime.update(1) == 1, "fixed 16ms step")
   call: assert(runtime.update(32) == 2, "two fixed steps")
-  call: assert(runtime.update(-1) == -1, "negative time rejected")
+  call: assert(runtime.update((0 - 1)) == (0 - 1), "negative time rejected")
   call: assert(runtime.tick_count() == 3)
   call: assert(scenes.ticks_in("menu") == 3)
 

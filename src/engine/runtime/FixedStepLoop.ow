@@ -17,7 +17,7 @@ class FixedStepLoop:
 
   fn update(elapsed_ms):
     if: elapsed_ms < 0
-      return: -1
+      return: (0 - 1)
     # Prevent a large frame stall from producing unbounded simulation work.
     set time: this.accumulator_ms + elapsed_ms
     set limit: this.interval_ms * this.max_steps
@@ -27,7 +27,7 @@ class FixedStepLoop:
     set executed int: 0
     while: this.accumulator_ms >= this.interval_ms
       if: this.scenes.tick() == 0
-        return: -1
+        return: (0 - 1)
       set this.accumulator_ms: this.accumulator_ms - this.interval_ms
       set this.ticks: this.ticks + 1
       set executed: executed + 1

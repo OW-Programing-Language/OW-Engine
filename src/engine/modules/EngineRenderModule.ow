@@ -1,0 +1,39 @@
+import "../render/RenderWorld.ow"
+
+# flOW service bridging gameplay ECS to existing OW Graphics services.
+# Register Graphics.Renderer, Graphics.Shader, Graphics.Transforms and
+# MakeMultiScene in the composition root before boot().
+class EngineRenderModule(Module):
+  field world
+
+  fn new(scenes, components, transforms, drawing, shader):
+    set this.world: new RenderWorld(scenes, components, transforms, drawing, shader)
+
+  fn name():
+    return: "engine.render"
+
+  fn requires():
+    return: ["scenes", "components", "transforms", "shader", "multi_scene"]
+
+  fn register(app):
+    call: app.require_as("engine.render", "scenes", "ENGINE_SCENES")
+    call: app.require_as("engine.render", "components", "ENGINE_COMPONENTS")
+    call: app.require_as("engine.render", "transforms", "GRAPHICS_TRANSFORM")
+    call: app.require_as("engine.render", "shader", "GRAPHICS_SHADER")
+    call: app.require_as("engine.render", "multi_scene", "GRAPHICS_MULTI_SCENE")
+    return: app.provide_as("render_world", "ENGINE_RENDER_WORLD", this.world)
+
+  fn start(app):
+    return: 0
+
+  fn stop(app):
+    return: 0
+
+  fn reload(app):
+    return: 0
+
+  fn on_event(type, payload):
+    return: 0
+
+  fn store():
+    return: this.world

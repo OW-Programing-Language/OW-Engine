@@ -1,0 +1,58 @@
+# GPU-free OW Engine example: one parent + one attached child, two mesh draws.
+# The same RenderWorld can be passed OpenGL backends from OW Graphics.
+import "@flow/src/App.ow"
+import "@graphics/src/graphics/math/api/TransformApi.ow"
+import "@graphics/src/graphics/math/infra/Transforms.ow"
+import "@graphics/src/graphics/camera/api/CameraApi.ow"
+import "@graphics/src/graphics/camera/infra/Camera.ow"
+import "@graphics/src/graphics/renderer/api/RendererApi.ow"
+import "@graphics/src/graphics/renderer/headless/HeadlessRenderer.ow"
+import "@graphics/src/graphics/shader/api/ShaderApi.ow"
+import "@graphics/src/graphics/shader/headless/HeadlessShader.ow"
+import "@graphics/src/graphics/scene/api/MultiSceneApi.ow"
+import "@graphics/src/graphics/scene/infra/MakeMultiScene.ow"
+import "../../src/engine/modules/EngineEntitiesModule.ow"
+import "../../src/engine/modules/EngineScenesModule.ow"
+import "../../src/engine/modules/EngineComponentsModule.ow"
+import "../../src/engine/modules/EngineRenderModule.ow"
+
+main:
+  set entities: new EngineEntitiesModule()
+  set scenes: new EngineScenesModule(entities.store())
+  set components: new EngineComponentsModule(entities.store())
+  set frame GRAPHICS_MULTI_SCENE: MakeMultiScene(Graphics.HeadlessRenderer)
+  set render: new EngineRenderModule(scenes.store(), components.store(), Graphics.Transforms, frame, Graphics.HeadlessShader)
+  set app: new App()
+  call: app.use(render)
+  call: app.use_native_as(frame, "GRAPHICS_MULTI_SCENE")
+  call: app.use_native_as(Graphics.HeadlessShader, "GRAPHICS_SHADER")
+  call: app.use_native_as(Graphics.Camera, "GRAPHICS_CAMERA")
+  call: app.use_native_as(Graphics.Transforms, "GRAPHICS_TRANSFORM")
+  call: app.use_native_as(Graphics.HeadlessRenderer, "GRAPHICS_RENDERER")
+  call: app.use(components)
+  call: app.use(scenes)
+  call: app.use(entities)
+  call: assert(app.boot() == 1)
+  set scene: app.service("scenes")
+  set ecs: app.service("components")
+  set world: app.service("render_world")
+  call: scene.attach_components(ecs)
+  call: scene.add_scene("OWCraft")
+  set tree int: scene.spawn("tree")
+  set leaf int: scene.spawn("leaf")
+  call: ecs.set_transform(tree, 2.0, 0.0, 0.0)
+  call: ecs.set_transform(leaf, 0.0, 2.0, 0.0)
+  call: ecs.set_parent(leaf, tree)
+  # Demonstration-only dummy mesh handles (headless renderer checks >0).
+  call: world.set_mesh(tree, 1)
+  call: world.set_mesh(leaf, 2)
+  set shader GRAPHICS_SHADER: app.service("shader")
+  set program int: shader.create("demo-vertex", "demo-fragment")
+  set camera GRAPHICS_CAMERA: app.service("camera")
+  set view: camera.view_from_position(0.0, 0.0, 5.0)
+  set projection: camera.perspective(1.0, 1.6, 0.1, 100.0)
+  set count int: world.render_frame(program, view, projection, 10, 20, 30)
+  call: assert(count == 2)
+  print: "OW Engine headless scene: " + scene.active_name() + ", meshes drawn=" + count
+  call: shader.destroy(program)
+  call: app.stop()

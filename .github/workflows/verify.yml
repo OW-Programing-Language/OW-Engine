@@ -58,6 +58,14 @@ jobs:
           java -jar ../ow-lang/target/OwIDE.jar check tests/headless_ecs.ow
           java -jar ../ow-lang/target/OwIDE.jar run tests/headless_ecs.ow
 
+      - name: Verify transform hierarchy, events and JSON checkpoints
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_hierarchy_events.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_hierarchy_events.ow
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_checkpoint.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_checkpoint.ow
+
       - name: Verify OW Graphics headless integration
         working-directory: ow-engine
         run: |

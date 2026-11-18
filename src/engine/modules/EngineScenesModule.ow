@@ -1,0 +1,32 @@
+import "../scenes/SceneManager.ow"
+
+class EngineScenesModule(Module):
+  field manager
+
+  fn new(entities):
+    set this.manager: new SceneManager(entities)
+
+  fn name():
+    return: "engine.scenes"
+
+  fn requires():
+    return: ["entities"]
+
+  fn register(app):
+    call: app.require_as("engine.scenes", "entities", "ENGINE_ENTITIES")
+    return: app.provide_as("scenes", "ENGINE_SCENES", this.manager)
+
+  fn start(app):
+    return: 0
+
+  fn stop(app):
+    return: 0
+
+  fn reload(app):
+    return: 0
+
+  fn on_event(type, payload):
+    return: 0
+
+  fn store():
+    return: this.manager

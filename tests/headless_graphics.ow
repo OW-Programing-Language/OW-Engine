@@ -1,0 +1,30 @@
+# Verifies dependency on OW Graphics without GLFW or OpenGL native libraries.
+# Scene management belongs to OW Engine; drawing is deliberately delegated to Graphics.
+import "@flow/src/App.ow"
+import "@graphics/src/graphics/renderer/api/RendererApi.ow"
+import "@graphics/src/graphics/renderer/headless/HeadlessRenderer.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineRuntimeModule.ow"
+
+main:
+  set entity_module: new EngineEntitiesModule()
+  set scene_module: new EngineScenesModule(entity_module.store())
+  set runtime_module: new EngineRuntimeModule(scene_module.store(), 16)
+  set app: new App()
+  call: app.use(runtime_module)
+  call: app.use_native_as(Graphics.HeadlessRenderer, "GRAPHICS_RENDERER")
+  call: app.use(scene_module)
+  call: app.use(entity_module)
+  call: assert(app.boot() == 1)
+  set renderer GRAPHICS_RENDERER: app.service("renderer")
+  call: assert(renderer.backend() == "headless")
+  call: assert(renderer.clear(10, 20, 30) == 1)
+  call: assert(renderer.draw_triangle() == 1)
+  set scenes: app.service("scenes")
+  call: assert(scenes.add_scene("test") == 1)
+  call: assert(scenes.spawn("cube") > 0)
+  set loop: app.service("runtime")
+  call: assert(loop.update(16) == 1)
+  call: assert(app.stop() == 1)
+  print: "PASS: OW Engine + flOW + OW Graphics headless integration"

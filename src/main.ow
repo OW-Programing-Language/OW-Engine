@@ -1,0 +1,29 @@
+# Minimal OW Engine headless demo. No GPU and no native extension required.
+import "@flow/src/App.ow"
+import "engine/modules/EngineEntitiesModule.ow"
+import "engine/modules/EngineScenesModule.ow"
+import "engine/modules/EngineRuntimeModule.ow"
+
+main:
+  set entity_module: new EngineEntitiesModule()
+  set scene_module: new EngineScenesModule(entity_module.store())
+  set runtime_module: new EngineRuntimeModule(scene_module.store(), 16)
+
+  set app: new App()
+  # Reverse registration proves that flOW starts dependencies in the right order.
+  call: app.use(runtime_module)
+  call: app.use(scene_module)
+  call: app.use(entity_module)
+  call: assert(app.boot() == 1, "OW Engine boot")
+
+  set entities: app.service("entities")
+  set scenes: app.service("scenes")
+  set runtime: app.service("runtime")
+  call: assert(scenes.add_scene("demo") == 1)
+  set player int: scenes.spawn("player")
+  call: assert(player > 0)
+  call: assert(entities.set_position(player, 1, 2, 3) == 1)
+  call: assert(runtime.update(48) == 3)
+  print: "OW Engine demo scene=" + scenes.active_name()
+  print: "entities=" + entities.count() + " ticks=" + runtime.tick_count()
+  call: assert(app.stop() == 1)

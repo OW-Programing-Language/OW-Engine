@@ -1,0 +1,111 @@
+# Phase 2b integration: hierarchy, lifecycle event bus, fixed-step notifications.
+import "@flow/src/App.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineRuntimeModule.ow"
+import "../src/engine/modules/EngineComponentsModule.ow"
+import "../src/engine/modules/EngineSystemsModule.ow"
+import "../src/engine/modules/EngineEventsModule.ow"
+import "../src/engine/systems/MovementSystem.ow"
+
+class EventCounter(EngineEventListener):
+  field hits
+  field last_payload
+
+  fn new():
+    set this.hits: 0
+    set this.last_payload: 0
+
+  fn on_event(type, payload):
+    set this.hits: this.hits + 1
+    set this.last_payload: payload
+    return: 1
+
+main:
+  set em: new EngineEntitiesModule()
+  set sm: new EngineScenesModule(em.store())
+  set cm: new EngineComponentsModule(em.store())
+  set ym: new EngineSystemsModule()
+  set rm: new EngineRuntimeModule(sm.store(), 16)
+  set evm: new EngineEventsModule()
+  set app: new App()
+  call: app.use(rm)
+  call: app.use(ym)
+  call: app.use(sm)
+  call: app.use(evm)
+  call: app.use(cm)
+  call: app.use(em)
+  call: assert(app.boot() == 1, "flOW phase 2b services boot")
+  set scenes: app.service("scenes")
+  set components: app.service("components")
+  set systems: app.service("systems")
+  set runtime: app.service("runtime")
+  set events: app.service("events")
+  call: assert(scenes.attach_components(components) == 1)
+  call: assert(scenes.attach_events(events) == 1)
+  call: assert(runtime.attach_systems(systems, components) == 1)
+  call: assert(runtime.attach_events(events) == 1)
+  call: assert(systems.register(new MovementSystem()) == 1)
+
+  set births: new EventCounter()
+  set deaths: new EventCounter()
+  set ticks: new EventCounter()
+  set changes: new EventCounter()
+  set birth_token int: events.subscribe("entity.spawned", births)
+  call: assert(birth_token > 0)
+  call: assert(events.subscribe("entity.destroyed", deaths) > 0)
+  call: assert(events.subscribe("engine.tick", ticks) > 0)
+  call: assert(events.subscribe("scene.activated", changes) > 0)
+  call: assert(events.subscribe("", births) == 0)
+  call: assert(events.active_count() == 4)
+
+  call: assert(scenes.add_scene("world") == 1)
+  set parent int: scenes.spawn("parent")
+  set child int: scenes.spawn("child")
+  set grandchild int: scenes.spawn("grandchild")
+  call: assert(births.hits == 3)
+  call: assert(births.last_payload == grandchild)
+  call: assert(components.set_transform(parent, 10, 0, 0) == 1)
+  call: assert(components.set_transform(child, 2, 0, 0) == 1)
+  call: assert(components.set_transform(grandchild, 1, 0, 0) == 1)
+  call: assert(components.set_parent(child, parent) == 1)
+  call: assert(components.set_parent(grandchild, child) == 1)
+  call: assert(components.parent_of(child) == parent)
+  call: assert(components.world_position(child)[0] == 12.0)
+  call: assert(components.world_position(grandchild)[0] == 13.0)
+  call: assert(components.set_parent(parent, parent) == 0, "cannot parent self")
+  call: assert(components.set_parent(parent, grandchild) == 0, "reject parent cycle")
+  call: assert(components.set_parent(child, 999) == 0, "invalid parent")
+  call: assert(components.parent_of(child) == parent)
+
+  call: assert(components.set_velocity(parent, 125, 0, 0) == 1)
+  call: assert(runtime.update(16) == 1)
+  call: assert(ticks.hits == 1)
+  call: assert(ticks.last_payload == 1)
+  call: assert(components.world_position(grandchild)[0] == 15.0)
+  call: assert(em.store().position(grandchild)[0] == 15.0, "legacy position mirrors world")
+  call: assert(scenes.add_scene("menu") == 1)
+  call: assert(scenes.activate("menu") == 1)
+  call: assert(changes.hits == 1)
+  call: assert(changes.last_payload == "menu")
+  call: assert(runtime.update(16) == 1)
+  call: assert(components.world_position(grandchild)[0] == 15.0, "inactive scene paused")
+  call: assert(scenes.activate("world") == 1)
+
+  call: assert(scenes.destroy(parent) == 1)
+  call: assert(deaths.hits == 1)
+  call: assert(deaths.last_payload == parent)
+  call: assert(components.parent_of(child) == 0, "child detached")
+  call: assert(components.world_position(child)[0] == 14.0, "child world position retained")
+  call: assert(components.world_position(grandchild)[0] == 15.0, "grandchild world retained")
+  call: assert(components.set_parent(child, parent) == 0, "cannot parent to dead entity")
+  call: assert(events.unsubscribe(birth_token) == 1)
+  call: assert(events.unsubscribe(birth_token) == 0)
+  call: assert(events.active_count() == 3)
+  set later int: scenes.spawn("later")
+  call: assert(later > 0)
+  call: assert(births.hits == 3, "unsubscribed listener not notified")
+  call: assert(events.publish("custom.event", 7) == 1)
+  call: assert(events.publish("", 7) == 0)
+  call: assert(app.stop() == 1)
+  print: "PASS: hierarchy, cycle guard, world preservation, flOW events and ticks"

@@ -9,6 +9,8 @@ class FixedStepLoop:
   field systems
   field components
   field systems_attached
+  field events
+  field events_attached
 
   fn new(scenes, interval_ms):
     call: assert(interval_ms > 0, "fixed step must be positive")
@@ -20,6 +22,15 @@ class FixedStepLoop:
     set this.systems: 0
     set this.components: 0
     set this.systems_attached: 0
+    set this.events: 0
+    set this.events_attached: 0
+
+  fn attach_events(events):
+    if: this.events_attached == 1
+      return: 0
+    set this.events: events
+    set this.events_attached: 1
+    return: 1
 
   fn attach_systems(systems, components):
     if: this.systems_attached == 1
@@ -47,6 +58,9 @@ class FixedStepLoop:
         return: (0 - 1)
       set this.accumulator_ms: this.accumulator_ms - this.interval_ms
       set this.ticks: this.ticks + 1
+      if: this.events_attached == 1
+        if: this.events.publish("engine.tick", this.ticks) == 0
+          return: (0 - 1)
       set executed: executed + 1
     return: executed
 

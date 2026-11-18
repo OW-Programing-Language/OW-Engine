@@ -9,6 +9,8 @@ class SceneManager:
   field active_index
   field components
   field components_attached
+  field events
+  field events_attached
 
   fn new(entities):
     set this.entities: entities
@@ -17,12 +19,21 @@ class SceneManager:
     set this.active_index: (0 - 1)
     set this.components: 0
     set this.components_attached: 0
+    set this.events: 0
+    set this.events_attached: 0
 
   fn attach_components(components):
     if: this.components_attached == 1
       return: 0
     set this.components: components
     set this.components_attached: 1
+    return: 1
+
+  fn attach_events(events):
+    if: this.events_attached == 1
+      return: 0
+    set this.events: events
+    set this.events_attached: 1
     return: 1
 
   fn index_of(name):
@@ -45,6 +56,8 @@ class SceneManager:
     if: this.active_index < 0
       set this.active_index: this.scene_count_value
     set this.scene_count_value: this.scene_count_value + 1
+    if: this.events_attached == 1
+      call: this.events.publish("scene.created", name)
     return: 1
 
   fn activate(name):
@@ -52,6 +65,8 @@ class SceneManager:
     if: idx < 0
       return: 0
     set this.active_index: idx
+    if: this.events_attached == 1
+      call: this.events.publish("scene.activated", name)
     return: 1
 
   fn active_name():
@@ -84,6 +99,8 @@ class SceneManager:
     if: current.add(id) == 0
       call: this.entities.destroy(id)
       return: 0
+    if: this.events_attached == 1
+      call: this.events.publish("entity.spawned", id)
     return: id
 
   fn destroy(id):
@@ -96,7 +113,11 @@ class SceneManager:
       set i: i + 1
     if: this.components_attached == 1
       call: this.components.remove_entity(id)
-    return: this.entities.destroy(id)
+    set result int: this.entities.destroy(id)
+    if: result == 1
+      if: this.events_attached == 1
+        call: this.events.publish("entity.destroyed", id)
+    return: result
 
   fn tick():
     if: this.active_index < 0

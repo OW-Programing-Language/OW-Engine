@@ -18,7 +18,5 @@ class MovementSystem(EngineSystem):
           set transform: components.get("transform", id)
           set velocity: components.get("velocity", id)
           call: transform.translate(velocity.x * seconds, velocity.y * seconds, velocity.z * seconds)
-          if: components.sync_position(id) == 0
-            return: 0
       set i: i + 1
-    return: 1
+    return: components.sync_all_positions()

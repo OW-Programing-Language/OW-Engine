@@ -1,0 +1,91 @@
+# Versioned JSON-friendly ECS checkpoint for an existing, ACTIVE scene.
+# This intentionally does NOT write files or create a new world. The host app
+# is responsible for persisting the returned JSON and keeping the same IDs.
+class SceneCheckpoint:
+  fn capture(scenes, components):
+    if: scenes.active_name() == ""
+      return: {}
+    set entries: array(scenes.active_entities(), 0)
+    set i int: 0
+    while: i < scenes.active_entities()
+      set id int: scenes.active_entity_at(i)
+      set pose: []
+      set velocity: []
+      if: components.has("transform", id) == 1
+        set transform: components.get("transform", id)
+        set pose: [transform.x, transform.y, transform.z, transform.rx, transform.ry, transform.rz, transform.sx, transform.sy, transform.sz, transform.parent_id]
+      if: components.has("velocity", id) == 1
+        set speed: components.get("velocity", id)
+        set velocity: [speed.x, speed.y, speed.z]
+      set entries[i]: {id: id, transform: pose, velocity: velocity}
+      set i: i + 1
+    return: {version: 1, scene: scenes.active_name(), entries: entries}
+
+  fn encode(scenes, components):
+    return: json(this.capture(scenes, components))
+
+  fn decode(serialized):
+    return: json_parse(serialized)
+
+  # Safe preflight for typical mismatches. Component mutations are intentionally
+  # not transactional: malformed or externally altered snapshots are unsupported.
+  fn restore(scenes, components, snapshot):
+    if: map_get(snapshot, "version", 0) != 1
+      return: 0
+    if: map_get(snapshot, "scene", "") != scenes.active_name()
+      return: 0
+    set entries: map_get(snapshot, "entries", [])
+    if: len(entries) != scenes.active_entities()
+      return: 0
+    set i int: 0
+    while: i < len(entries)
+      set item: entries[i]
+      if: item.id != scenes.active_entity_at(i)
+        return: 0
+      if: components.entities.exists(item.id) == 0
+        return: 0
+      if: len(item.transform) != 0
+        if: len(item.transform) != 10
+          return: 0
+      if: len(item.velocity) != 0
+        if: len(item.velocity) != 3
+          return: 0
+      set i: i + 1
+
+    # First restore component values without parent links.
+    set i: 0
+    while: i < len(entries)
+      set item: entries[i]
+      set id int: item.id
+      set pose: item.transform
+      if: len(pose) == 0
+        call: components.remove("transform", id)
+      else:
+        if: components.has("transform", id) == 1
+          if: components.set_parent(id, 0) == 0
+            return: 0
+        if: components.set_transform(id, pose[0], pose[1], pose[2]) == 0
+          return: 0
+        set transform: components.get("transform", id)
+        call: transform.set_rotation(pose[3], pose[4], pose[5])
+        call: transform.set_scale(pose[6], pose[7], pose[8])
+      set speed: item.velocity
+      if: len(speed) == 0
+        call: components.remove("velocity", id)
+      else:
+        if: components.set_velocity(id, speed[0], speed[1], speed[2]) == 0
+          return: 0
+      set i: i + 1
+
+    # Parent relations are restored only after all transforms exist.
+    set i: 0
+    while: i < len(entries)
+      set item: entries[i]
+      if: len(item.transform) == 10
+        if: components.set_parent(item.id, item.transform[9]) == 0
+          return: 0
+      set i: i + 1
+    return: components.sync_all_positions()
+
+  fn restore_json(scenes, components, serialized):
+    return: this.restore(scenes, components, this.decode(serialized))

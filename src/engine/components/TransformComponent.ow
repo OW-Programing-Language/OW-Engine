@@ -9,6 +9,7 @@ class TransformComponent:
   field sx
   field sy
   field sz
+  field parent_id
 
   fn new(px, py, pz):
     set this.x: px
@@ -20,6 +21,10 @@ class TransformComponent:
     set this.sx: 1
     set this.sy: 1
     set this.sz: 1
+    set this.parent_id: 0
+
+  fn parent():
+    return: this.parent_id
 
   fn set_position(px, py, pz):
     set this.x: px

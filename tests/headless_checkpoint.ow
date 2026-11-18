@@ -1,0 +1,53 @@
+import "@flow/src/App.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineComponentsModule.ow"
+import "../src/engine/persistence/SceneCheckpoint.ow"
+
+main:
+  set em: new EngineEntitiesModule()
+  set sm: new EngineScenesModule(em.store())
+  set cm: new EngineComponentsModule(em.store())
+  set app: new App()
+  call: app.use(cm)
+  call: app.use(sm)
+  call: app.use(em)
+  call: assert(app.boot() == 1)
+  set scenes: app.service("scenes")
+  set components: app.service("components")
+  call: assert(scenes.attach_components(components) == 1)
+  call: assert(scenes.add_scene("world") == 1)
+  set parent int: scenes.spawn("parent")
+  set child int: scenes.spawn("child")
+  call: assert(components.set_transform(parent, 5, 0, 0) == 1)
+  call: assert(components.set_transform(child, 2, 0, 0) == 1)
+  call: assert(components.set_velocity(child, 10, 20, 30) == 1)
+  call: assert(components.set_parent(child, parent) == 1)
+  set pose: components.get("transform", child)
+  call: pose.set_rotation(0, 90, 0)
+  call: pose.set_scale(2, 2, 2)
+
+  set codec: new SceneCheckpoint()
+  set saved: codec.encode(scenes, components)
+  call: assert(len(saved) > 20, "JSON checkpoint")
+  set checkpoint: codec.decode(saved)
+  call: assert(checkpoint.version == 1)
+  call: assert(len(checkpoint.entries) == 2)
+  call: assert(codec.restore(scenes, components, {version: 99, scene: "world", entries: []}) == 0)
+  call: assert(codec.restore(scenes, components, {version: 1, scene: "wrong", entries: []}) == 0)
+  call: assert(codec.restore(scenes, components, {version: 1, scene: "world", entries: []}) == 0)
+
+  call: assert(components.set_parent(child, 0) == 1)
+  call: assert(components.set_transform(child, 100, 200, 300) == 1)
+  call: assert(components.set_velocity(child, 0, 0, 0) == 1)
+  call: assert(components.get("transform", child).set_rotation(10, 20, 30) == 1)
+  call: assert(codec.restore_json(scenes, components, saved) == 1, "roundtrip restore")
+  call: assert(components.parent_of(child) == parent)
+  call: assert(components.world_position(child)[0] == 7.0)
+  call: assert(em.store().position(child)[0] == 7.0)
+  call: assert(components.get("velocity", child).x == 10)
+  call: assert(components.get("velocity", child).y == 20)
+  call: assert(components.get("transform", child).rotation()[1] == 90)
+  call: assert(components.get("transform", child).scale()[0] == 2)
+  call: assert(app.stop() == 1)
+  print: "PASS: versioned scene JSON checkpoint roundtrip and mismatch rejection"

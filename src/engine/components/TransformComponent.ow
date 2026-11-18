@@ -1,0 +1,55 @@
+# Gameplay transform. Camera projection and matrices remain owned by OW Graphics.
+class TransformComponent:
+  field x
+  field y
+  field z
+  field rx
+  field ry
+  field rz
+  field sx
+  field sy
+  field sz
+
+  fn new(px, py, pz):
+    set this.x: px
+    set this.y: py
+    set this.z: pz
+    set this.rx: 0
+    set this.ry: 0
+    set this.rz: 0
+    set this.sx: 1
+    set this.sy: 1
+    set this.sz: 1
+
+  fn set_position(px, py, pz):
+    set this.x: px
+    set this.y: py
+    set this.z: pz
+    return: 1
+
+  fn translate(dx, dy, dz):
+    set this.x: this.x + dx
+    set this.y: this.y + dy
+    set this.z: this.z + dz
+    return: 1
+
+  fn set_rotation(x, y, z):
+    set this.rx: x
+    set this.ry: y
+    set this.rz: z
+    return: 1
+
+  fn set_scale(x, y, z):
+    set this.sx: x
+    set this.sy: y
+    set this.sz: z
+    return: 1
+
+  fn position():
+    return: [this.x, this.y, this.z]
+
+  fn rotation():
+    return: [this.rx, this.ry, this.rz]
+
+  fn scale():
+    return: [this.sx, this.sy, this.sz]

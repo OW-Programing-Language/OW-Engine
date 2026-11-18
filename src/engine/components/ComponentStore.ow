@@ -1,0 +1,56 @@
+# Dense slots indexed by stable (id - 1). A slot is never reused for a different ID.
+# This matches v0.1 EntityStore's 256-lifetime-entity limit.
+class ComponentStore:
+  field label
+  field values
+  field present
+  field count_value
+
+  fn new(label):
+    set this.label: label
+    set this.values: array(256, 0)
+    set this.present: array(256, 0)
+    set this.count_value: 0
+
+  fn valid(id):
+    if: id < 1
+      return: 0
+    if: id > len(this.values)
+      return: 0
+    return: 1
+
+  fn has(id):
+    if: this.valid(id) == 0
+      return: 0
+    return: this.present[id - 1]
+
+  fn put(id, value):
+    if: this.valid(id) == 0
+      return: 0
+    set slot int: id - 1
+    if: this.present[slot] == 0
+      set this.count_value: this.count_value + 1
+    set values: this.values
+    set present: this.present
+    set values[slot]: value
+    set present[slot]: 1
+    return: 1
+
+  fn get(id):
+    if: this.has(id) == 0
+      return: 0
+    return: this.values[id - 1]
+
+  fn remove(id):
+    if: this.has(id) == 0
+      return: 0
+    set slot int: id - 1
+    set present: this.present
+    set values: this.values
+    set present[slot]: 0
+    set values[slot]: 0
+    set this.count_value: this.count_value - 1
+    return: 1
+
+  fn count():
+    return: this.count_value

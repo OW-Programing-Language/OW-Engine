@@ -1,0 +1,110 @@
+import "ComponentStore.ow"
+import "TransformComponent.ow"
+import "VelocityComponent.ow"
+
+# Extensible per-entity component storage. Entity existence is always checked.
+# Reserved transform and velocity types have convenient constructors.
+class ComponentRegistry:
+  field entities
+  field types
+  field stores
+  field type_count
+
+  fn new(entities):
+    set this.entities: entities
+    set this.types: array(32, "")
+    set this.stores: array(32, 0)
+    set this.type_count: 0
+    call: this.register_type("transform")
+    call: this.register_type("velocity")
+
+  fn index_of(name):
+    set i int: 0
+    while: i < this.type_count
+      if: this.types[i] == name
+        return: i
+      set i: i + 1
+    return: (0 - 1)
+
+  fn register_type(name):
+    if: name == ""
+      return: 0
+    if: this.index_of(name) >= 0
+      return: 0
+    if: this.type_count >= len(this.types)
+      return: 0
+    set types: this.types
+    set stores: this.stores
+    set types[this.type_count]: name
+    set stores[this.type_count]: new ComponentStore(name)
+    set this.type_count: this.type_count + 1
+    return: 1
+
+  fn type_count_value():
+    return: this.type_count
+
+  fn has(name, id):
+    if: this.entities.exists(id) == 0
+      return: 0
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: 0
+    return: this.stores[idx].has(id)
+
+  fn put(name, id, value):
+    if: this.entities.exists(id) == 0
+      return: 0
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: 0
+    return: this.stores[idx].put(id, value)
+
+  fn get(name, id):
+    if: this.has(name, id) == 0
+      return: 0
+    set idx int: this.index_of(name)
+    return: this.stores[idx].get(id)
+
+  fn remove(name, id):
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: 0
+    return: this.stores[idx].remove(id)
+
+  fn count_for(name):
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: 0
+    return: this.stores[idx].count()
+
+  fn remove_entity(id):
+    set i int: 0
+    while: i < this.type_count
+      call: this.stores[i].remove(id)
+      set i: i + 1
+    return: 1
+
+  fn set_transform(id, x, y, z):
+    if: this.entities.exists(id) == 0
+      return: 0
+    if: this.has("transform", id) == 1
+      set transform: this.get("transform", id)
+      call: transform.set_position(x, y, z)
+    else:
+      if: this.put("transform", id, new TransformComponent(x, y, z)) == 0
+        return: 0
+    return: this.entities.set_position(id, x, y, z)
+
+  fn set_velocity(id, vx, vy, vz):
+    if: this.entities.exists(id) == 0
+      return: 0
+    if: this.has("velocity", id) == 1
+      set velocity: this.get("velocity", id)
+      return: velocity.set(vx, vy, vz)
+    return: this.put("velocity", id, new VelocityComponent(vx, vy, vz))
+
+  fn sync_position(id):
+    if: this.has("transform", id) == 0
+      return: 0
+    set transform: this.get("transform", id)
+    return: this.entities.set_position(id, transform.x, transform.y, transform.z)

@@ -1,0 +1,57 @@
+name: Verify OW Engine
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout OW Engine
+        uses: actions/checkout@v4
+        with:
+          path: ow-engine
+
+      - name: Checkout OW compiler
+        uses: actions/checkout@v4
+        with:
+          repository: OW-Programing-Language/ow-lang
+          # Revision used by OW Graphics' working headless CI.
+          ref: e249975a4f835e7ad5378cf7f3633e059d8396b4
+          path: ow-lang
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: ow-lang/pom.xml
+
+      - name: Build OW runtime
+        run: mvn -B -q -f ow-lang/pom.xml -DskipTests install
+
+      - name: Resolve SHA-pinned source libraries
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar deps install
+          git diff --exit-code -- dependencies.lock.yml
+
+      - name: Verify OW engine and flOW integration
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check src/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar run src/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_engine.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_engine.ow
+
+      - name: Verify OW Graphics headless integration
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_graphics.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_graphics.ow

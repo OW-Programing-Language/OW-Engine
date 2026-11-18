@@ -1,0 +1,4 @@
+# Listener callback: return 1 on success, 0 to report failure.
+# Events are synchronous, deterministic, and dispatched in subscription order.
+interface EngineEventListener:
+  fn on_event(type, payload)

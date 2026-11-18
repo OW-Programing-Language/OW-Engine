@@ -1,0 +1,81 @@
+import "EngineEventListener.ow"
+
+# Headless-first synchronous event bus. No background threads or task queue.
+# Subscriptions can be removed during dispatch without reordering other listeners.
+class EventBus:
+  field types
+  field listeners
+  field tokens
+  field active
+  field slots
+  field next_token
+  field dispatch_depth
+
+  fn new():
+    set this.types: array(64, "")
+    set this.listeners: array(64, 0)
+    set this.tokens: array(64, 0)
+    set this.active: array(64, 0)
+    set this.slots: 0
+    set this.next_token: 1
+    set this.dispatch_depth: 0
+
+  fn subscribe(type, listener):
+    set checked EngineEventListener: listener
+    if: type == ""
+      return: 0
+    if: this.slots >= len(this.listeners)
+      return: 0
+    set slot int: this.slots
+    set types: this.types
+    set listeners: this.listeners
+    set tokens: this.tokens
+    set enabled: this.active
+    set types[slot]: type
+    set listeners[slot]: checked
+    set tokens[slot]: this.next_token
+    set enabled[slot]: 1
+    set this.slots: this.slots + 1
+    set this.next_token: this.next_token + 1
+    return: tokens[slot]
+
+  fn unsubscribe(token):
+    set i int: 0
+    while: i < this.slots
+      if: this.tokens[i] == token
+        if: this.active[i] == 0
+          return: 0
+        set enabled: this.active
+        set enabled[i]: 0
+        return: 1
+      set i: i + 1
+    return: 0
+
+  fn active_count():
+    set count int: 0
+    set i int: 0
+    while: i < this.slots
+      if: this.active[i] == 1
+        set count: count + 1
+      set i: i + 1
+    return: count
+
+  fn publish(type, payload):
+    if: type == ""
+      return: 0
+    if: this.dispatch_depth >= 16
+      return: 0
+    set this.dispatch_depth: this.dispatch_depth + 1
+    # Capture end index: subscriptions added by listeners run on NEXT publish.
+    set limit int: this.slots
+    set i int: 0
+    while: i < limit
+      if: this.active[i] == 1
+        if: this.types[i] == type
+          set listener: this.listeners[i]
+          if: listener.on_event(type, payload) == 0
+            set this.dispatch_depth: this.dispatch_depth - 1
+            return: 0
+      set i: i + 1
+    set this.dispatch_depth: this.dispatch_depth - 1
+    return: 1

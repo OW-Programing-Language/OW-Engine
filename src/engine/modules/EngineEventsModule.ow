@@ -1,0 +1,31 @@
+import "../events/EventBus.ow"
+
+class EngineEventsModule(Module):
+  field bus
+
+  fn new():
+    set this.bus: new EventBus()
+
+  fn name():
+    return: "engine.events"
+
+  fn requires():
+    return: []
+
+  fn register(app):
+    return: app.provide_as("events", "ENGINE_EVENTS", this.bus)
+
+  fn start(app):
+    return: 0
+
+  fn stop(app):
+    return: 0
+
+  fn reload(app):
+    return: 0
+
+  fn on_event(type, payload):
+    return: this.bus.publish(type, payload)
+
+  fn store():
+    return: this.bus

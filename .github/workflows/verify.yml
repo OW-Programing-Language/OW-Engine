@@ -79,3 +79,35 @@ jobs:
           java -jar ../ow-lang/target/OwIDE.jar run tests/headless_render_world.ow
           java -jar ../ow-lang/target/OwIDE.jar check examples/render_world/main.ow
           java -jar ../ow-lang/target/OwIDE.jar run examples/render_world/main.ow
+
+      - name: Verify GPU demo OW syntax
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check examples/voxel_preview/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar check examples/voxel_preview/smoke.ow
+
+      - name: Build OW Graphics real OpenGL native extension
+        run: |
+          git clone --quiet --no-checkout https://github.com/OW-Programing-Language/OW-Graphics.git ow-graphics
+          git -C ow-graphics checkout --quiet 4f00a5b4da076b3062269c9861878fcb34b590e8
+          mvn -B -q -f ow-graphics/native-bridge/pom.xml package dependency:copy-dependencies -DoutputDirectory=target/lib
+
+      - name: Install Mesa/Xvfb software OpenGL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libgl1 libxcursor1 libxi6 libxrandr2 libxinerama1
+
+      - name: Compile test-only framebuffer probe
+        run: |
+          mkdir -p ow-engine/target/probe-classes/META-INF/services
+          javac -cp "ow-lang/target/OwIDE.jar:ow-graphics/native-bridge/target/classes:ow-graphics/native-bridge/target/lib/*" \
+            -d ow-engine/target/probe-classes ow-engine/tests/gpu/FramebufferProbe.java
+          cp ow-engine/tests/gpu/META-INF/services/dev.oreo.RuntimeExtension \
+            ow-engine/target/probe-classes/META-INF/services/dev.oreo.RuntimeExtension
+
+      - name: Render real ECS cubes and verify Mesa framebuffer pixels
+        working-directory: ow-engine
+        run: |
+          xvfb-run -a -s "-screen 0 800x600x24" env LIBGL_ALWAYS_SOFTWARE=1 \
+            java -cp "../ow-lang/target/OwIDE.jar:../ow-graphics/native-bridge/target/classes:../ow-graphics/native-bridge/target/lib/*:target/probe-classes" \
+            dev.oreo.Main run examples/voxel_preview/smoke.ow

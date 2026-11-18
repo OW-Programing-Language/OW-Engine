@@ -1,0 +1,22 @@
+# GPU integration smoke: real OW -> flOW -> ECS -> OpenGL -> framebuffer.
+# Pixel sampler is a TEST-ONLY RuntimeExtension, absent from production builds.
+import "GpuScene.ow"
+
+main:
+  set game: new GpuScene()
+  call: assert(game.start() == 1)
+  call: assert(game.render() == 2, "two indexed textured cubes rendered from ECS")
+  # OpenGL back-buffer is sampled before swap; center remains clear between cubes.
+  set left: extension("engine.test.pixel", 110, 120)
+  set right: extension("engine.test.pixel", 210, 120)
+  set background: extension("engine.test.pixel", 160, 120)
+  call: assert(left[2] > 125, "left cube must have blue textured pixels")
+  call: assert(left[0] < 145, "left cube keeps its blue material")
+  call: assert(right[2] > 125, "right cube must have blue textured pixels")
+  call: assert(right[0] < 145, "right cube keeps its blue material")
+  call: assert(background[0] < 40, "center gap is background")
+  call: assert(background[1] < 40)
+  call: assert(background[2] < 40)
+  call: assert(game.present() == 1)
+  call: assert(game.stop() == 1)
+  print: "PASS: OW Engine ECS -> OpenGL texturing/depth + independent framebuffer cubes"

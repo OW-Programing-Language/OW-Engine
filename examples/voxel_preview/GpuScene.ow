@@ -1,0 +1,171 @@
+# Interactive GPU-backed voxel preview using real OW Engine ECS + OW Graphics.
+# Matrices, shaders, textures, mesh and window are provided by OW Graphics.
+import "@flow/src/App.ow"
+import "@graphics/src/graphics/window/api/WindowApi.ow"
+import "@graphics/src/graphics/window/infra/GlfwWindow.ow"
+import "@graphics/src/graphics/input/api/InputApi.ow"
+import "@graphics/src/graphics/input/infra/GlfwInput.ow"
+import "@graphics/src/graphics/renderer/api/RendererApi.ow"
+import "@graphics/src/graphics/renderer/opengl/OpenGLRenderer.ow"
+import "@graphics/src/graphics/shader/api/ShaderApi.ow"
+import "@graphics/src/graphics/shader/opengl/OpenGLShader.ow"
+import "@graphics/src/graphics/mesh/api/MeshApi.ow"
+import "@graphics/src/graphics/mesh/opengl/OpenGLMesh.ow"
+import "@graphics/src/graphics/texture/api/TextureApi.ow"
+import "@graphics/src/graphics/texture/opengl/OpenGLTexture.ow"
+import "@graphics/src/graphics/math/api/TransformApi.ow"
+import "@graphics/src/graphics/math/infra/Transforms.ow"
+import "@graphics/src/graphics/camera/api/CameraApi.ow"
+import "@graphics/src/graphics/camera/infra/Camera.ow"
+import "@graphics/src/graphics/geometry/api/GeometryApi.ow"
+import "@graphics/src/graphics/geometry/infra/CubeGeometry.ow"
+import "@graphics/src/graphics/scene/api/MultiSceneApi.ow"
+import "@graphics/src/graphics/scene/infra/MakeMultiScene.ow"
+import "../../src/engine/modules/EngineEntitiesModule.ow"
+import "../../src/engine/modules/EngineScenesModule.ow"
+import "../../src/engine/modules/EngineComponentsModule.ow"
+import "../../src/engine/modules/EngineRenderModule.ow"
+
+class GpuScene:
+  field app
+  field entities
+  field scene
+  field ecs
+  field world
+  field window
+  field input
+  field renderer
+  field shader
+  field texture_api
+  field mesh_api
+  field camera
+  field mesh
+  field texture
+  field program
+  field player
+
+  fn new():
+    set entity_module: new EngineEntitiesModule()
+    set scene_module: new EngineScenesModule(entity_module.store())
+    set component_module: new EngineComponentsModule(entity_module.store())
+    set multi_scene GRAPHICS_MULTI_SCENE: MakeMultiScene(Graphics.OpenGLRenderer)
+    set render_module: new EngineRenderModule(scene_module.store(), component_module.store(), Graphics.Transforms, multi_scene, Graphics.OpenGLShader)
+    set this.app: new App()
+    # Reverse dependency registration demonstrates real flOW topological startup.
+    call: this.app.use(render_module)
+    call: this.app.use_native_as(multi_scene, "GRAPHICS_MULTI_SCENE")
+    call: this.app.use_native_as(Graphics.CubeGeometry, "GRAPHICS_CUBE_GEOMETRY")
+    call: this.app.use_native_as(Graphics.Camera, "GRAPHICS_CAMERA")
+    call: this.app.use_native_as(Graphics.Transforms, "GRAPHICS_TRANSFORM")
+    call: this.app.use_native_as(Graphics.OpenGLTexture, "GRAPHICS_TEXTURE")
+    call: this.app.use_native_as(Graphics.OpenGLMesh, "GRAPHICS_MESH")
+    call: this.app.use_native_as(Graphics.OpenGLShader, "GRAPHICS_SHADER")
+    call: this.app.use_native_as(Graphics.GlfwInput, "GRAPHICS_INPUT")
+    call: this.app.use_native_as(Graphics.OpenGLRenderer, "GRAPHICS_RENDERER")
+    call: this.app.use_native_as(Graphics.GlfwWindow, "GRAPHICS_WINDOW")
+    call: this.app.use(component_module)
+    call: this.app.use(scene_module)
+    call: this.app.use(entity_module)
+    set this.mesh: 0
+    set this.texture: 0
+    set this.program: 0
+    set this.player: 0
+
+  fn start():
+    if: this.app.boot() == 0
+      return: 0
+    set this.window: this.app.service("window")
+    set this.input: this.app.service("input")
+    set this.renderer: this.app.service("renderer")
+    set this.shader: this.app.service("shader")
+    set this.mesh_api: this.app.service("mesh")
+    set this.texture_api: this.app.service("texture")
+    set this.camera: this.app.service("camera")
+    set this.scene: this.app.service("scenes")
+    set this.ecs: this.app.service("components")
+    set this.world: this.app.service("render_world")
+    set geometry GRAPHICS_CUBE_GEOMETRY: this.app.service("geometry")
+    call: assert(this.window.open(320, 240, "OW Engine / Voxel Preview") == 1, "OpenGL 3.3 context")
+    call: assert(this.renderer.depth_test(1) == 1, "depth testing")
+    call: assert(this.scene.attach_components(this.ecs) == 1)
+    call: assert(this.scene.add_scene("overworld") == 1)
+
+    # Proper indexed cube with UVs and flat face normals; native GPU allocation.
+    set this.mesh: this.mesh_api.create_lit_indexed(geometry.positions(), geometry.uvs(), geometry.normals(), geometry.indices())
+    call: assert(this.mesh > 0, "real OpenGL cube mesh")
+    # Original 2x2 RGBA8 texture in bottom-to-top row order.
+    set this.texture: this.texture_api.create_rgba8(2, 2, [50, 170, 245, 255, 50, 170, 245, 255, 50, 170, 245, 255, 50, 170, 245, 255])
+    call: assert(this.texture > 0, "real OpenGL texture")
+
+    set vertex: "#version 330 core\nlayout(location=0) in vec3 pos;\nlayout(location=1) in vec2 uv;\nlayout(location=2) in vec3 normal;\nout vec2 vUv;\nout vec3 vNormal;\nuniform mat4 uModel;\nuniform mat4 uView;\nuniform mat4 uProjection;\nvoid main(){vUv=uv;vNormal=mat3(uModel)*normal;gl_Position=uProjection*uView*uModel*vec4(pos,1.0);}"
+    set fragment: "#version 330 core\nin vec2 vUv;\nin vec3 vNormal;\nout vec4 pixel;\nuniform sampler2D uTexture;\nvoid main(){float diffuse=max(dot(normalize(vNormal),normalize(vec3(0.2,0.5,1.0))),0.0);float lit=0.30+0.70*diffuse;pixel=vec4(texture(uTexture,vUv).rgb*lit,1.0);}"
+    set this.program: this.shader.create(vertex, fragment)
+    call: assert(this.program > 0, "compiled GLSL shaders")
+    call: assert(this.shader.bind(this.program) == 1)
+    call: assert(this.shader.set_int(this.program, "uTexture", 0) == 1)
+    call: assert(this.texture_api.bind(this.texture, 0) == 1)
+
+    set left int: this.scene.spawn("left-cube")
+    set right int: this.scene.spawn("right-cube")
+    set this.player: this.scene.spawn("camera-player")
+    call: assert(left > 0)
+    call: assert(right > 0)
+    call: assert(this.player > 0)
+    call: assert(this.ecs.set_transform(left, 0.0 - 1.25, 0.0, 0.0) == 1)
+    call: assert(this.ecs.set_transform(right, 1.25, 0.0, 0.0) == 1)
+    call: assert(this.ecs.set_transform(this.player, 0.0, 0.0, 6.0) == 1)
+    call: assert(this.world.set_mesh(left, this.mesh) == 1)
+    call: assert(this.world.set_mesh(right, this.mesh) == 1)
+    return: 1
+
+  fn poll():
+    return: this.window.poll()
+
+  fn is_running():
+    return: 1 - this.window.should_close()
+
+  fn update_controls():
+    if: this.input.key_down("ESCAPE") == 1
+      return: this.window.request_close()
+    set pose: this.ecs.get("transform", this.player)
+    set x float: pose.x
+    set z float: pose.z
+    if: this.input.key_down("A") == 1
+      set x: x - 0.05
+    if: this.input.key_down("D") == 1
+      set x: x + 0.05
+    if: this.input.key_down("W") == 1
+      set z: z - 0.05
+    if: this.input.key_down("S") == 1
+      set z: z + 0.05
+    if: z < 2.0
+      set z: 2.0
+    if: z > 16.0
+      set z: 16.0
+    return: this.ecs.set_transform(this.player, x, 0.0, z)
+
+  fn render():
+    set pose: this.ecs.get("transform", this.player)
+    set view: this.camera.view_from_position(0.0 + pose.x, 0.0, 0.0 + pose.z)
+    set projection: this.camera.perspective(1.0471975512, 1.3333333333333, 0.1, 100.0)
+    if: this.shader.bind(this.program) == 0
+      return: 0
+    if: this.texture_api.bind(this.texture, 0) == 0
+      return: 0
+    return: this.world.render_frame(this.program, view, projection, 12, 18, 25)
+
+  fn present():
+    return: this.window.present()
+
+  fn stop():
+    # Delete native resources BEFORE closing the graphics context.
+    if: this.texture > 0
+      call: this.texture_api.destroy(this.texture)
+      set this.texture: 0
+    if: this.mesh > 0
+      call: this.mesh_api.destroy(this.mesh)
+      set this.mesh: 0
+    if: this.program > 0
+      call: this.shader.destroy(this.program)
+      set this.program: 0
+    return: this.app.stop()

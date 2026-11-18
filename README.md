@@ -142,6 +142,12 @@ The optional `EngineRenderModule` provides an ECS-to-OW-Graphics rendering adapt
 
 See [render-world integration](docs/RENDER-WORLD.md) and the [headless demonstration](examples/render_world/main.ow). Full X/Z rotation, GPU framebuffer testing, resource lifetime automation and real-time window orchestration remain future work.
 
+## First GPU-backed ECS scene (phase 3a)
+
+[**Voxel Preview**](examples/voxel_preview/main.ow) uses real OW Engine entities and the `RenderWorld` adapter to render two textured 3D cubes through OW Graphics' GLFW/OpenGL 3.3 backend. A third ECS entity controls the player camera through **W/A/S/D**, and **Escape** closes the window. The demo shares one mesh and one texture across objects and cleans up native resources before shutdown.
+
+A one-frame [GPU smoke test](examples/voxel_preview/smoke.ow) samples the real Mesa/Xvfb framebuffer through a CI-only Java probe; it verifies both objects and the background. See [build, controls and limits](docs/VOXEL-PREVIEW.md).
+
 ## Scope and limitations
 
 - Entity storage: 256 lifetime allocations per store (no slot reuse yet).

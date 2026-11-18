@@ -71,3 +71,11 @@ jobs:
         run: |
           java -jar ../ow-lang/target/OwIDE.jar check tests/headless_graphics.ow
           java -jar ../ow-lang/target/OwIDE.jar run tests/headless_graphics.ow
+
+      - name: Verify ECS to Graphics render-world adapter
+        working-directory: ow-engine
+        run: |
+          java -jar ../ow-lang/target/OwIDE.jar check tests/headless_render_world.ow
+          java -jar ../ow-lang/target/OwIDE.jar run tests/headless_render_world.ow
+          java -jar ../ow-lang/target/OwIDE.jar check examples/render_world/main.ow
+          java -jar ../ow-lang/target/OwIDE.jar run examples/render_world/main.ow

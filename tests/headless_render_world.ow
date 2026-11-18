@@ -1,0 +1,105 @@
+# Actual flOW + Graphics camera/matrices/multiscene/shader ECS integration.
+# No desktop or GPU needed. Graphics owns all rendering and matrix operations.
+import "@flow/src/App.ow"
+import "@graphics/src/graphics/math/api/TransformApi.ow"
+import "@graphics/src/graphics/math/infra/Transforms.ow"
+import "@graphics/src/graphics/camera/api/CameraApi.ow"
+import "@graphics/src/graphics/camera/infra/Camera.ow"
+import "@graphics/src/graphics/renderer/api/RendererApi.ow"
+import "@graphics/src/graphics/renderer/headless/HeadlessRenderer.ow"
+import "@graphics/src/graphics/shader/api/ShaderApi.ow"
+import "@graphics/src/graphics/shader/headless/HeadlessShader.ow"
+import "@graphics/src/graphics/scene/api/MultiSceneApi.ow"
+import "@graphics/src/graphics/scene/infra/MakeMultiScene.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineComponentsModule.ow"
+import "../src/engine/modules/EngineRenderModule.ow"
+
+main:
+  set entities_module: new EngineEntitiesModule()
+  set scenes_module: new EngineScenesModule(entities_module.store())
+  set components_module: new EngineComponentsModule(entities_module.store())
+  set frame GRAPHICS_MULTI_SCENE: MakeMultiScene(Graphics.HeadlessRenderer)
+  set render_module: new EngineRenderModule(scenes_module.store(), components_module.store(), Graphics.Transforms, frame, Graphics.HeadlessShader)
+  set app: new App()
+
+  # Deliberately reversed module order: flOW must sort all dependencies.
+  call: app.use(render_module)
+  call: app.use_native_as(frame, "GRAPHICS_MULTI_SCENE")
+  call: app.use_native_as(Graphics.HeadlessShader, "GRAPHICS_SHADER")
+  call: app.use_native_as(Graphics.Camera, "GRAPHICS_CAMERA")
+  call: app.use_native_as(Graphics.Transforms, "GRAPHICS_TRANSFORM")
+  call: app.use_native_as(Graphics.HeadlessRenderer, "GRAPHICS_RENDERER")
+  call: app.use(components_module)
+  call: app.use(scenes_module)
+  call: app.use(entities_module)
+  call: assert(app.boot() == 1, "flOW engine + graphics services boot")
+  call: assert(app.disable("transforms") == 0, "rendering requires graphics transforms")
+  call: assert(app.disable("multi_scene") == 0, "rendering requires drawing scene")
+
+  set scenes: app.service("scenes")
+  set components: app.service("components")
+  set world: app.service("render_world")
+  set camera GRAPHICS_CAMERA: app.service("camera")
+  call: scenes.attach_components(components)
+  call: assert(scenes.add_scene("overworld") == 1)
+  set parent int: scenes.spawn("parent")
+  set child int: scenes.spawn("child")
+  set decoration int: scenes.spawn("decoration")
+  call: assert(components.set_transform(parent, 2.0, 0.0, 0.0) == 1)
+  call: assert(components.set_transform(child, 1.0, 0.0, 0.0) == 1)
+  call: assert(components.set_transform(decoration, 0.0, 0.0, 1.0) == 1)
+  set parent_transform: components.get("transform", parent)
+  call: parent_transform.set_rotation(0.0, 1.5707963267948966, 0.0)
+  call: parent_transform.set_scale(2.0, 1.0, 1.0)
+  call: assert(components.set_parent(child, parent) == 1)
+
+  # Parent scale applies before Y rotation. Child should approach (2, 0, -2).
+  set child_matrix: world.model_matrix(child)
+  call: assert(len(child_matrix) == 16)
+  call: assert(child_matrix[12] > 1.99)
+  call: assert(child_matrix[12] < 2.01)
+  call: assert(child_matrix[14] < 0.0 - 1.99)
+  call: assert(child_matrix[14] > 0.0 - 2.01)
+  set rendered: world.rendered_position(child)
+  call: assert(len(rendered) == 3)
+  call: assert(rendered[2] < 0.0 - 1.99)
+  call: assert(components.world_position(child)[0] == 3.0, "legacy position remains translation-only")
+
+  call: assert(world.set_mesh(parent, 10) == 1)
+  call: assert(world.set_mesh(child, 11) == 1)
+  call: assert(world.set_mesh(0, 99) == 0)
+  call: assert(world.set_mesh(child, 0) == 0)
+  call: assert(world.mesh_of(decoration) == 0)
+  set shader GRAPHICS_SHADER: app.service("shader")
+  set program int: shader.create("vertex", "fragment")
+  call: assert(program > 0)
+  set view: camera.view_from_position(0.0, 0.0, 8.0)
+  set projection: camera.perspective(1.0471975512, 1.6, 0.1, 100.0)
+  call: assert(world.render_frame(program, view, projection, 20, 30, 40) == 2)
+  call: assert(world.last_draw_count() == 2)
+  call: assert(world.render_frame(program, [], projection, 20, 30, 40) == 0 - 1)
+
+  # Only draw active scene entities; switching scenes must not draw old mesh.
+  call: assert(scenes.add_scene("menu") == 1)
+  call: assert(scenes.activate("menu") == 1)
+  call: assert(world.render_frame(program, view, projection, 20, 30, 40) == 0)
+  call: assert(scenes.activate("overworld") == 1)
+  call: assert(world.clear_mesh(parent) == 1)
+  call: assert(world.render_frame(program, view, projection, 20, 30, 40) == 1)
+
+  # Reject unsupported X/Z angles rather than silently dropping them.
+  call: parent_transform.set_rotation(0.2, 0.0, 0.0)
+  call: assert(len(world.model_matrix(child)) == 0)
+  call: assert(world.render_frame(program, view, projection, 20, 30, 40) == 0 - 1)
+  call: parent_transform.set_rotation(0.0, 0.0, 0.0)
+
+  # Entity destruction invalidates its mesh binding without owning the GPU handle.
+  call: assert(scenes.destroy(child) == 1)
+  call: assert(world.mesh_of(child) == 0)
+  call: assert(world.set_mesh(child, 11) == 0)
+  call: assert(world.render_frame(program, view, projection, 20, 30, 40) == 0)
+  call: assert(shader.destroy(program) == 1)
+  call: assert(app.stop() == 1)
+  print: "PASS: OW Engine ECS -> Graphics world matrices and scene rendering"

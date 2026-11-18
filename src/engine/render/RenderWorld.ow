@@ -1,0 +1,116 @@
+import "WorldMatrices.ow"
+
+# A non-owning rendering bridge: GPU mesh and shader IDs belong to OW Graphics.
+# No rendering takes place if there is no active scene. Draws active-scene
+# entities only, in their stable scene insertion order.
+class RenderWorld:
+  field scenes
+  field components
+  field drawing
+  field shaders
+  field matrices
+  field mesh_handles
+  field last_drawn
+
+  fn new(scenes, components, transforms, drawing, shaders):
+    set this.scenes: scenes
+    set this.components: components
+    set this.drawing: drawing
+    set this.shaders: shaders
+    set this.matrices: new WorldMatrices(components, transforms)
+    set this.mesh_handles: array(257, 0)
+    set this.last_drawn: 0
+
+  # Mesh handles are OpenGL/Graphics-owned; this only records a reference.
+  fn set_mesh(id, mesh_handle):
+    if: id < 1
+      return: 0
+    if: id >= len(this.mesh_handles)
+      return: 0
+    if: mesh_handle < 1
+      return: 0
+    if: this.components.entities.exists(id) == 0
+      return: 0
+    set meshes: this.mesh_handles
+    set meshes[id]: mesh_handle
+    return: 1
+
+  fn clear_mesh(id):
+    if: id < 1
+      return: 0
+    if: id >= len(this.mesh_handles)
+      return: 0
+    if: this.mesh_handles[id] == 0
+      return: 0
+    set meshes: this.mesh_handles
+    set meshes[id]: 0
+    return: 1
+
+  fn mesh_of(id):
+    if: id < 1
+      return: 0
+    if: id >= len(this.mesh_handles)
+      return: 0
+    if: this.components.entities.exists(id) == 0
+      return: 0
+    return: this.mesh_handles[id]
+
+  fn model_matrix(id):
+    return: this.matrices.world_matrix(id)
+
+  fn rendered_position(id):
+    return: this.matrices.rendered_position(id)
+
+  fn last_draw_count():
+    return: this.last_drawn
+
+  # Returns number drawn (0 when empty), or -1 on invalid inputs/graphics errors.
+  # The view and projection matrices are supplied by Graphics.Camera.
+  # Shader must provide uModel, uView, uProjection mat4 uniforms.
+  fn render_frame(program_id, view, projection, red, green, blue):
+    set this.last_drawn: 0
+    if: program_id < 1
+      return: 0 - 1
+    if: len(view) != 16
+      return: 0 - 1
+    if: len(projection) != 16
+      return: 0 - 1
+    if: this.scenes.active_name() == ""
+      return: 0 - 1
+
+    # Preflight all model matrices BEFORE touching the renderer.
+    # Invalid transform modes do not produce a partially drawn scene.
+    set models: array(257, [])
+    set i int: 0
+    while: i < this.scenes.active_entities()
+      set id int: this.scenes.active_entity_at(i)
+      if: this.mesh_of(id) > 0
+        set world: this.matrices.world_matrix(id)
+        if: len(world) != 16
+          return: 0 - 1
+        set models[id]: world
+      set i: i + 1
+
+    if: this.shaders.bind(program_id) == 0
+      return: 0 - 1
+    if: this.shaders.set_mat4(program_id, "uView", view) == 0
+      return: 0 - 1
+    if: this.shaders.set_mat4(program_id, "uProjection", projection) == 0
+      return: 0 - 1
+    if: this.drawing.begin_frame(red, green, blue) == 0
+      return: 0 - 1
+
+    set i: 0
+    set count int: 0
+    while: i < this.scenes.active_entities()
+      set id int: this.scenes.active_entity_at(i)
+      set mesh int: this.mesh_of(id)
+      if: mesh > 0
+        if: this.shaders.set_mat4(program_id, "uModel", models[id]) == 0
+          return: 0 - 1
+        if: this.drawing.draw_object(mesh) == 0
+          return: 0 - 1
+        set count: count + 1
+      set i: i + 1
+    set this.last_drawn: count
+    return: count

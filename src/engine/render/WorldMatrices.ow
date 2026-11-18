@@ -1,0 +1,60 @@
+# ECS -> Graphics world-matrix adapter. All matrix math stays in OW Graphics.
+# Supported for now: translation, Y-axis rotation (radians) and nonuniform scale.
+# X/Z Euler rotations are deliberately rejected until Graphics exposes them.
+class WorldMatrices:
+  field components
+  field transforms
+
+  fn new(components, transforms):
+    set this.components: components
+    set this.transforms: transforms
+
+  fn local_matrix(id):
+    if: this.components.has("transform", id) == 0
+      return: []
+    set pose: this.components.get("transform", id)
+    if: pose.rx != 0
+      return: []
+    if: pose.rz != 0
+      return: []
+    if: pose.ry < 0.0 - 3.141592653589793
+      return: []
+    if: pose.ry > 3.141592653589793
+      return: []
+    set translation: this.transforms.translation(0.0 + pose.x, 0.0 + pose.y, 0.0 + pose.z)
+    set rotation: this.transforms.rotation_y(0.0 + pose.ry)
+    set scaling: this.transforms.scaling(0.0 + pose.sx, 0.0 + pose.sy, 0.0 + pose.sz)
+    return: this.transforms.compose(this.transforms.compose(translation, rotation), scaling)
+
+  # Reconstruct ancestor-first hierarchy without relying on entity allocation order.
+  # The component registry enforces cycle-safe links, but still guard traversal.
+  fn world_matrix(id):
+    if: this.components.has("transform", id) == 0
+      return: []
+    set chain: array(256, 0)
+    set depth int: 0
+    set cursor int: id
+    while: cursor > 0
+      if: depth >= len(chain)
+        return: []
+      if: this.components.has("transform", cursor) == 0
+        return: []
+      set chain[depth]: cursor
+      set depth: depth + 1
+      set cursor: this.components.parent_of(cursor)
+    set world: this.transforms.identity()
+    set i int: depth
+    while: i > 0
+      set i: i - 1
+      set local: this.local_matrix(chain[i])
+      if: len(local) != 16
+        return: []
+      set world: this.transforms.compose(world, local)
+    return: world
+
+  # ECS's world_position() remains translation-only for backward compatibility.
+  fn rendered_position(id):
+    set matrix: this.world_matrix(id)
+    if: len(matrix) != 16
+      return: []
+    return: [matrix[12], matrix[13], matrix[14]]

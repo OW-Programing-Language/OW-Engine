@@ -15,7 +15,7 @@ OW Engine is an early-stage, **headless-first** 2D/3D game-engine project writte
 - **Events:** synchronous, subscription-based bus for scene creation/activation, entity lifecycle and simulation ticks.
 - **Checkpoints:** versioned JSON export/import of transform and velocity state for the **same live scene and entity IDs**.
 - **flOW:** independently registered entity, scene, component, system and runtime modules, service contracts, dependency-ordered startup and shutdown.
-- **OW Graphics:** an explicitly SHA-pinned source dependency, with a GPU-free integration test using its real headless rendering contract.
+- **OW Graphics:** an explicitly SHA-pinned source dependency; the optional RenderWorld adapter now computes hierarchical model matrices through Graphics.Transforms and submits active-scene ECS meshes to a Graphics multi-object renderer.
 - **Tests:** native OW assertions for lifecycle, scene isolation, entity invalidation, fixed-step logic and graphics-service compatibility.
 
 No OpenGL or GLFW installation is needed for the headless tests.
@@ -61,6 +61,8 @@ ow run tests/headless_ecs.ow
 ow run tests/headless_hierarchy_events.ow
 ow run tests/headless_checkpoint.ow
 ow run examples/ecs_motion/main.ow
+ow run tests/headless_render_world.ow
+ow run examples/render_world/main.ow
 ```
 
 For a source-built compiler, replace `ow` with `java -jar /path/to/ow-lang/target/OwIDE.jar`.
@@ -134,6 +136,12 @@ call: codec.restore_json(scenes, components, json_text)
 
 This is a **checkpoint contract**, not disk persistence or a full game save. It deliberately does not recreate entities, restore custom component types, include historical scene state, or guarantee rollback from malformed external JSON.
 
+## Rendering ECS scenes with OW Graphics (phase 2c)
+
+The optional `EngineRenderModule` provides an ECS-to-OW-Graphics rendering adapter and registers the `render_world` flOW service. It delegates camera, shader and frame drawing to OW Graphics, while resolving parent rotation, scale and translation with OW Graphics' matrices. An entity's positive mesh handle can be linked with `world.set_mesh(id, mesh_handle)`; `world.render_frame(program, view, projection, r, g, b)` then draws only active-scene entities. No graphics resources are owned by OW Engine.
+
+See [render-world integration](docs/RENDER-WORLD.md) and the [headless demonstration](examples/render_world/main.ow). Full X/Z rotation, GPU framebuffer testing, resource lifetime automation and real-time window orchestration remain future work.
+
 ## Scope and limitations
 
 - Entity storage: 256 lifetime allocations per store (no slot reuse yet).
@@ -142,7 +150,7 @@ This is a **checkpoint contract**, not disk persistence or a full game save. It 
 - Component data is bounded to the same 256 lifetime entity IDs; currently 32 component types and 32 systems can be registered.
 - Fixed-step systems execute deterministically only if attached; the original scene-counter-only loop remains compatible.
 - ECS components remain in-memory; checkpoint JSON is application-owned and scoped to the same live IDs. There is no file I/O, full-world persistence or object graph serialization yet.
-- World transforms compose parent **translation only**; rotation/scale propagation remains future work.
+- Legacy ECS `world_position` composes parent **translation only**; the opt-in `RenderWorld` computes parent scale and Y rotation via OW Graphics. X/Z rotation remains unsupported.
 - OW's Java-hosted interpreter runs this foundation; this is **not** native-AOT gameplay code.
 - OW Graphics GPU integration, interactive game window and 3D draw submission are future integration milestones.
 

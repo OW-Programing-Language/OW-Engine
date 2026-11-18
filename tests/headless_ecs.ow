@@ -1,0 +1,114 @@
+# End-to-end ECS test with OW interpreter + flOW, no GPU.
+import "@flow/src/App.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineRuntimeModule.ow"
+import "../src/engine/modules/EngineComponentsModule.ow"
+import "../src/engine/modules/EngineSystemsModule.ow"
+import "../src/engine/systems/MovementSystem.ow"
+
+# Ensures the registry can host arbitrary systems, not just built-in movement.
+class CounterSystem(EngineSystem):
+  field ticks
+
+  fn new():
+    set this.ticks: 0
+
+  fn name():
+    return: "counter"
+
+  fn update(scenes, components, delta_ms):
+    set this.ticks: this.ticks + 1
+    return: 1
+
+main:
+  set entities_module: new EngineEntitiesModule()
+  set scenes_module: new EngineScenesModule(entities_module.store())
+  set components_module: new EngineComponentsModule(entities_module.store())
+  set systems_module: new EngineSystemsModule()
+  set runtime_module: new EngineRuntimeModule(scenes_module.store(), 16)
+  set app: new App()
+  # Deliberately out of dependency order: flOW resolves the graph.
+  call: app.use(runtime_module)
+  call: app.use(systems_module)
+  call: app.use(components_module)
+  call: app.use(scenes_module)
+  call: app.use(entities_module)
+  call: assert(app.boot() == 1, "flOW ECS modules boot")
+  call: assert(app.disable("engine.entities") == 0)
+  call: assert(app.disable("engine.components") == 0)
+  call: assert(app.disable("engine.scenes") == 0)
+
+  set entities: app.service("entities")
+  set scenes: app.service("scenes")
+  set components: app.service("components")
+  set systems: app.service("systems")
+  set runtime: app.service("runtime")
+  call: assert(scenes.attach_components(components) == 1)
+  call: assert(scenes.attach_components(components) == 0)
+  call: assert(runtime.attach_systems(systems, components) == 1)
+  call: assert(runtime.attach_systems(systems, components) == 0)
+
+  set counter: new CounterSystem()
+  call: assert(systems.register(new MovementSystem()) == 1)
+  call: assert(systems.register(counter) == 1)
+  call: assert(systems.register(new MovementSystem()) == 0)
+  call: assert(systems.count() == 2)
+
+  call: assert(components.type_count_value() == 2)
+  call: assert(components.register_type("transform") == 0)
+  call: assert(components.register_type("health") == 1)
+  call: assert(components.put("health", 999, 100) == 0)
+  call: assert(scenes.add_scene("world") == 1)
+  set hero int: scenes.spawn("hero")
+  call: assert(hero > 0)
+
+  call: assert(components.set_transform(hero, 2, 3, 4) == 1)
+  call: assert(components.set_velocity(hero, 125, 0, 0) == 1)
+  call: assert(components.put("health", hero, 100) == 1)
+  call: assert(components.put("health", hero, 80) == 1)
+  call: assert(components.count_for("health") == 1)
+  call: assert(components.get("health", hero) == 80)
+  set transform: components.get("transform", hero)
+  call: assert(transform.set_rotation(0, 90, 0) == 1)
+  call: assert(transform.set_scale(1, 2, 3) == 1)
+  call: assert(transform.rotation()[1] == 90)
+  call: assert(transform.scale()[1] == 2)
+  call: assert(runtime.update(15) == 0)
+  call: assert(runtime.update(1) == 1)
+  call: assert(counter.ticks == 1)
+  set pos: entities.position(hero)
+  call: assert(pos[0] > 3.99, "moved two units")
+  call: assert(pos[0] < 4.01, "movement is deterministic")
+  call: assert(pos[1] == 3)
+  call: assert(components.get("transform", hero).position()[0] > 3.99)
+
+  call: assert(scenes.add_scene("menu") == 1)
+  call: assert(scenes.activate("menu") == 1)
+  call: assert(runtime.update(16) == 1)
+  call: assert(entities.position(hero)[0] < 4.01, "inactive scene entity did not move")
+  call: assert(counter.ticks == 2, "systems still run for active scene")
+  set menu_actor int: scenes.spawn("menu_actor")
+  call: assert(components.set_transform(menu_actor, 0, 0, 0) == 1)
+  call: assert(components.set_velocity(menu_actor, 125, 0, 0) == 1)
+  call: assert(systems.set_enabled("movement", 0) == 1)
+  call: assert(runtime.update(16) == 1)
+  call: assert(entities.position(menu_actor)[0] == 0, "disabled system cannot move entities")
+  call: assert(counter.ticks == 3)
+  call: assert(systems.set_enabled("movement", 1) == 1)
+  call: assert(runtime.update(16) == 1)
+  call: assert(entities.position(menu_actor)[0] > 1.99)
+  call: assert(scenes.ticks_in("world") == 1)
+  call: assert(scenes.ticks_in("menu") == 3)
+
+  call: assert(scenes.destroy(hero) == 1, "can destroy inactive scene entity")
+  call: assert(scenes.destroy(hero) == 0, "cannot destroy twice")
+  call: assert(components.has("transform", hero) == 0)
+  call: assert(components.has("velocity", hero) == 0)
+  call: assert(components.count_for("health") == 0)
+  call: assert(components.set_transform(hero, 0, 0, 0) == 0)
+  call: assert(components.put("health", hero, 10) == 0)
+  call: assert(entities.count() == 1)
+
+  call: assert(app.stop() == 1)
+  print: "PASS: OW Engine ECS components, flOW services, movement, scene isolation and cleanup"

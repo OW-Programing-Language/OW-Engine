@@ -1,0 +1,42 @@
+# Standalone ECS demo (no GPU). Run from project root after ow deps install.
+import "@flow/src/App.ow"
+import "../../src/engine/modules/EngineEntitiesModule.ow"
+import "../../src/engine/modules/EngineScenesModule.ow"
+import "../../src/engine/modules/EngineRuntimeModule.ow"
+import "../../src/engine/modules/EngineComponentsModule.ow"
+import "../../src/engine/modules/EngineSystemsModule.ow"
+import "../../src/engine/systems/MovementSystem.ow"
+
+main:
+  set entity_module: new EngineEntitiesModule()
+  set scene_module: new EngineScenesModule(entity_module.store())
+  set component_module: new EngineComponentsModule(entity_module.store())
+  set system_module: new EngineSystemsModule()
+  set runtime_module: new EngineRuntimeModule(scene_module.store(), 16)
+
+  set app: new App()
+  call: app.use(runtime_module)
+  call: app.use(system_module)
+  call: app.use(component_module)
+  call: app.use(scene_module)
+  call: app.use(entity_module)
+  call: assert(app.boot() == 1, "ECS dependency ordered boot")
+
+  set scenes: app.service("scenes")
+  set components: app.service("components")
+  set runtime: app.service("runtime")
+  set systems: app.service("systems")
+  call: assert(scenes.attach_components(components) == 1)
+  call: assert(runtime.attach_systems(systems, components) == 1)
+  call: assert(systems.register(new MovementSystem()) == 1)
+
+  call: assert(scenes.add_scene("world") == 1)
+  set player int: scenes.spawn("player")
+  call: assert(components.set_transform(player, 0, 0, 0) == 1)
+  call: assert(components.set_velocity(player, 125, 0, 0) == 1)
+  call: assert(runtime.update(48) == 3)
+
+  set transform: components.get("transform", player)
+  print: "scene=" + scenes.active_name()
+  print: "player x=" + transform.x + " after " + runtime.tick_count() + " ticks"
+  call: assert(app.stop() == 1)

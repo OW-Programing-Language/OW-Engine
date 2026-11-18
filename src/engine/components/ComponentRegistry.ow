@@ -65,11 +65,95 @@ class ComponentRegistry:
     set idx int: this.index_of(name)
     return: this.stores[idx].get(id)
 
+  # Translate-only hierarchy for world position. Rotation/scale composition
+  # stays with OW Graphics; this avoids duplicating its matrix functions.
+  fn world_position(id):
+    if: this.has("transform", id) == 0
+      return: []
+    set x: 0.0
+    set y: 0.0
+    set z: 0.0
+    set cursor int: id
+    set depth int: 0
+    while: cursor > 0
+      if: this.has("transform", cursor) == 0
+        return: []
+      if: depth >= 256
+        return: []
+      set transform: this.get("transform", cursor)
+      set x: x + transform.x
+      set y: y + transform.y
+      set z: z + transform.z
+      set cursor: transform.parent_id
+      set depth: depth + 1
+    return: [x, y, z]
+
+  fn parent_of(id):
+    if: this.has("transform", id) == 0
+      return: 0
+    return: this.get("transform", id).parent_id
+
+  # Returns 0 for self-parenting, cycles and missing parent transforms.
+  # Parent=0 detaches the child; the child's local position is kept.
+  fn set_parent(id, parent):
+    if: this.has("transform", id) == 0
+      return: 0
+    if: id == parent
+      return: 0
+    if: parent != 0
+      if: this.has("transform", parent) == 0
+        return: 0
+    set cursor int: parent
+    set depth int: 0
+    while: cursor > 0
+      if: cursor == id
+        return: 0
+      if: this.has("transform", cursor) == 0
+        return: 0
+      if: depth >= 256
+        return: 0
+      set cursor: this.get("transform", cursor).parent_id
+      set depth: depth + 1
+    set transform: this.get("transform", id)
+    set transform.parent_id: parent
+    return: this.sync_all_positions()
+
+  # Keep world positions stable if a parent is destroyed or loses transform.
+  fn detach_children(id):
+    set child int: 1
+    while: child <= this.entities.total_created()
+      if: this.has("transform", child) == 1
+        set transform: this.get("transform", child)
+        if: transform.parent_id == id
+          set world: this.world_position(child)
+          if: len(world) != 3
+            return: 0
+          set transform.parent_id: 0
+          call: transform.set_position(world[0], world[1], world[2])
+      set child: child + 1
+    return: 1
+
+  fn sync_all_positions():
+    set id int: 1
+    while: id <= this.entities.total_created()
+      if: this.has("transform", id) == 1
+        if: this.sync_position(id) == 0
+          return: 0
+      set id: id + 1
+    return: 1
+
   fn remove(name, id):
+    if: name == "transform"
+      if: this.has("transform", id) == 1
+        if: this.detach_children(id) == 0
+          return: 0
     set idx int: this.index_of(name)
     if: idx < 0
       return: 0
-    return: this.stores[idx].remove(id)
+    set result int: this.stores[idx].remove(id)
+    if: name == "transform"
+      call: this.sync_all_positions()
+    return: result
 
   fn count_for(name):
     set idx int: this.index_of(name)
@@ -78,11 +162,14 @@ class ComponentRegistry:
     return: this.stores[idx].count()
 
   fn remove_entity(id):
+    if: this.has("transform", id) == 1
+      if: this.detach_children(id) == 0
+        return: 0
     set i int: 0
     while: i < this.type_count
       call: this.stores[i].remove(id)
       set i: i + 1
-    return: 1
+    return: this.sync_all_positions()
 
   fn set_transform(id, x, y, z):
     if: this.entities.exists(id) == 0
@@ -93,7 +180,7 @@ class ComponentRegistry:
     else:
       if: this.put("transform", id, new TransformComponent(x, y, z)) == 0
         return: 0
-    return: this.entities.set_position(id, x, y, z)
+    return: this.sync_all_positions()
 
   fn set_velocity(id, vx, vy, vz):
     if: this.entities.exists(id) == 0
@@ -107,4 +194,7 @@ class ComponentRegistry:
     if: this.has("transform", id) == 0
       return: 0
     set transform: this.get("transform", id)
-    return: this.entities.set_position(id, transform.x, transform.y, transform.z)
+    set world: this.world_position(id)
+    if: len(world) != 3
+      return: 0
+    return: this.entities.set_position(id, world[0], world[1], world[2])

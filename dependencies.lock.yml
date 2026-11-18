@@ -1,0 +1,12 @@
+format: 1
+dependencies:
+  - name: "flow"
+    repository: "github"
+    path: "OW-Programing-Language/flOW---OW-Modular-Framework"
+    version: "6d91239698e88994ac6057ea46a176fe79394acb"
+    commit: "6d91239698e88994ac6057ea46a176fe79394acb"
+  - name: "graphics"
+    repository: "github"
+    path: "OW-Programing-Language/OW-Graphics"
+    version: "fb4c48a2d35ee01ba912d27b80a4fe8d9eb00c43"
+    commit: "fb4c48a2d35ee01ba912d27b80a4fe8d9eb00c43"

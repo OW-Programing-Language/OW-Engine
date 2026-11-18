@@ -1,0 +1,98 @@
+# Stable, monotonic entity IDs and simple 3D transform storage.
+# Foundation uses bounded OW arrays; it does not attempt GPU allocation or ECS archetypes.
+class EntityStore:
+  field ids
+  field names
+  field alive
+  field x
+  field y
+  field z
+  field slots
+  field living
+  field next_id
+
+  fn new():
+    set this.ids: array(256, 0)
+    set this.names: array(256, "")
+    set this.alive: array(256, 0)
+    set this.x: array(256, 0)
+    set this.y: array(256, 0)
+    set this.z: array(256, 0)
+    set this.slots: 0
+    set this.living: 0
+    set this.next_id: 1
+
+  fn index_of(id):
+    set i int: 0
+    while: i < this.slots
+      if: this.ids[i] == id
+        return: i
+      set i: i + 1
+    return: -1
+
+  fn create(name):
+    if: this.slots >= len(this.ids)
+      return: 0
+    set slot int: this.slots
+    set identifiers: this.ids
+    set labels: this.names
+    set active: this.alive
+    set xs: this.x
+    set ys: this.y
+    set zs: this.z
+    set identifiers[slot]: this.next_id
+    set labels[slot]: name
+    set active[slot]: 1
+    set xs[slot]: 0
+    set ys[slot]: 0
+    set zs[slot]: 0
+    set this.slots: this.slots + 1
+    set this.living: this.living + 1
+    set this.next_id: this.next_id + 1
+    return: identifiers[slot]
+
+  fn exists(id):
+    set idx int: this.index_of(id)
+    if: idx < 0
+      return: 0
+    return: this.alive[idx]
+
+  fn destroy(id):
+    set idx int: this.index_of(id)
+    if: idx < 0
+      return: 0
+    if: this.alive[idx] == 0
+      return: 0
+    set active: this.alive
+    set active[idx]: 0
+    set this.living: this.living - 1
+    return: 1
+
+  fn set_position(id, px, py, pz):
+    if: this.exists(id) == 0
+      return: 0
+    set idx int: this.index_of(id)
+    set xs: this.x
+    set ys: this.y
+    set zs: this.z
+    set xs[idx]: px
+    set ys[idx]: py
+    set zs[idx]: pz
+    return: 1
+
+  fn position(id):
+    if: this.exists(id) == 0
+      return: []
+    set idx int: this.index_of(id)
+    return: [this.x[idx], this.y[idx], this.z[idx]]
+
+  fn name_of(id):
+    if: this.exists(id) == 0
+      return: ""
+    return: this.names[this.index_of(id)]
+
+  fn count():
+    return: this.living
+
+  fn total_created():
+    return: this.slots

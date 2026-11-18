@@ -1,0 +1,97 @@
+import "Scene.ow"
+
+# Multiple isolated scenes share a stable entity registry.
+# Switching scenes does not delete paused-scene entities.
+class SceneManager:
+  field entities
+  field scenes
+  field scene_count_value
+  field active_index
+
+  fn new(entities):
+    set this.entities: entities
+    set this.scenes: array(32, 0)
+    set this.scene_count_value: 0
+    set this.active_index: -1
+
+  fn index_of(name):
+    set i int: 0
+    while: i < this.scene_count_value
+      if: this.scenes[i].name() == name
+        return: i
+      set i: i + 1
+    return: -1
+
+  fn add_scene(name):
+    if: name == ""
+      return: 0
+    if: this.index_of(name) >= 0
+      return: 0
+    if: this.scene_count_value >= len(this.scenes)
+      return: 0
+    set scenes: this.scenes
+    set scenes[this.scene_count_value]: new Scene(name)
+    if: this.active_index < 0
+      set this.active_index: this.scene_count_value
+    set this.scene_count_value: this.scene_count_value + 1
+    return: 1
+
+  fn activate(name):
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: 0
+    set this.active_index: idx
+    return: 1
+
+  fn active_name():
+    if: this.active_index < 0
+      return: ""
+    return: this.scenes[this.active_index].name()
+
+  fn scene_count():
+    return: this.scene_count_value
+
+  fn active_entities():
+    if: this.active_index < 0
+      return: 0
+    return: this.scenes[this.active_index].size()
+
+  fn active_entity_at(index):
+    if: this.active_index < 0
+      return: 0
+    return: this.scenes[this.active_index].entity_at(index)
+
+  fn spawn(name):
+    if: this.active_index < 0
+      return: 0
+    set current: this.scenes[this.active_index]
+    if: current.size() >= 128
+      return: 0
+    set id int: this.entities.create(name)
+    if: id == 0
+      return: 0
+    if: current.add(id) == 0
+      call: this.entities.destroy(id)
+      return: 0
+    return: id
+
+  fn destroy(id):
+    if: this.entities.exists(id) == 0
+      return: 0
+    set i int: 0
+    while: i < this.scene_count_value
+      set scene: this.scenes[i]
+      call: scene.remove(id)
+      set i: i + 1
+    return: this.entities.destroy(id)
+
+  fn tick():
+    if: this.active_index < 0
+      return: 0
+    return: this.scenes[this.active_index].advance()
+
+  fn ticks_in(name):
+    set idx int: this.index_of(name)
+    if: idx < 0
+      return: -1
+    return: this.scenes[idx].tick_count()

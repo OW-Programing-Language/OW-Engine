@@ -1,0 +1,67 @@
+# No GPU required. Exercises real OW code, flOW dependency graph and ECS foundation.
+import "@flow/src/App.ow"
+import "../src/engine/modules/EngineEntitiesModule.ow"
+import "../src/engine/modules/EngineScenesModule.ow"
+import "../src/engine/modules/EngineRuntimeModule.ow"
+
+main:
+  set entity_module: new EngineEntitiesModule()
+  set scene_module: new EngineScenesModule(entity_module.store())
+  set runtime_module: new EngineRuntimeModule(scene_module.store(), 16)
+  set app: new App()
+  call: app.use(runtime_module)
+  call: app.use(scene_module)
+  call: app.use(entity_module)
+  call: assert(app.boot() == 1, "flOW dependency ordered startup")
+  call: assert(app.has_service("entities") == 1)
+  call: assert(app.has_service("scenes") == 1)
+  call: assert(app.has_service("runtime") == 1)
+  call: assert(app.disable("engine.entities") == 0, "required entities cannot be disabled")
+  call: assert(app.disable("engine.scenes") == 0, "required scenes cannot be disabled")
+
+  set entities: app.service("entities")
+  set scenes: app.service("scenes")
+  set runtime: app.service("runtime")
+  call: assert(scenes.add_scene("") == 0, "reject empty scene")
+  call: assert(scenes.add_scene("menu") == 1)
+  call: assert(scenes.add_scene("menu") == 0, "unique scene names")
+  call: assert(scenes.add_scene("world") == 1)
+  call: assert(scenes.active_name() == "menu")
+
+  set hero int: scenes.spawn("hero")
+  call: assert(hero > 0)
+  call: assert(entities.name_of(hero) == "hero")
+  call: assert(entities.count() == 1)
+  call: assert(entities.set_position(hero, 4, 5, 6) == 1)
+  set pos: entities.position(hero)
+  call: assert(pos[0] == 4)
+  call: assert(pos[1] == 5)
+  call: assert(pos[2] == 6)
+  call: assert(scenes.active_entity_at(0) == hero)
+
+  call: assert(runtime.update(15) == 0, "wait for full fixed step")
+  call: assert(runtime.update(1) == 1, "fixed 16ms step")
+  call: assert(runtime.update(32) == 2, "two fixed steps")
+  call: assert(runtime.update(-1) == -1, "negative time rejected")
+  call: assert(runtime.tick_count() == 3)
+  call: assert(scenes.ticks_in("menu") == 3)
+
+  call: assert(scenes.activate("world") == 1)
+  call: assert(scenes.active_entities() == 0, "new scene has no entities")
+  set block int: scenes.spawn("block")
+  call: assert(block > hero, "entity ids must never be reused")
+  call: assert(scenes.active_entities() == 1)
+  call: assert(runtime.update(16) == 1)
+  call: assert(scenes.ticks_in("menu") == 3, "inactive scene stays paused")
+  call: assert(scenes.ticks_in("world") == 1)
+  call: assert(scenes.activate("menu") == 1)
+  call: assert(scenes.active_entity_at(0) == hero, "scene retains entities")
+  call: assert(scenes.destroy(hero) == 1)
+  call: assert(scenes.destroy(hero) == 0, "double destruction is rejected")
+  call: assert(entities.exists(hero) == 0)
+  call: assert(entities.set_position(hero, 1, 2, 3) == 0, "stale ids rejected")
+  call: assert(scenes.active_entities() == 0)
+  call: assert(entities.count() == 1)
+  call: assert(scenes.activate("missing") == 0)
+  call: assert(app.stop() == 1)
+  print: "PASS: OW Engine flOW lifecycle, entities, scene isolation, fixed steps"

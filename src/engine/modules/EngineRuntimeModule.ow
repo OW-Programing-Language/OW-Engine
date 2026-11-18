@@ -1,0 +1,32 @@
+import "../runtime/FixedStepLoop.ow"
+
+class EngineRuntimeModule(Module):
+  field loop
+
+  fn new(scenes, interval_ms):
+    set this.loop: new FixedStepLoop(scenes, interval_ms)
+
+  fn name():
+    return: "engine.runtime"
+
+  fn requires():
+    return: ["scenes"]
+
+  fn register(app):
+    call: app.require_as("engine.runtime", "scenes", "ENGINE_SCENES")
+    return: app.provide_as("runtime", "ENGINE_RUNTIME", this.loop)
+
+  fn start(app):
+    return: 0
+
+  fn stop(app):
+    return: 0
+
+  fn reload(app):
+    return: 0
+
+  fn on_event(type, payload):
+    return: 0
+
+  fn store():
+    return: this.loop

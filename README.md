@@ -2,14 +2,16 @@
 
 **A modular game-engine foundation for the OW programming language, powered by flOW and OW Graphics.**
 
-OW Engine is an early-stage, **headless-first** 2D/3D game-engine project written in OW. The first milestone implements deterministic game state and simulation plumbing; it does **not** yet render a world, simulate physics, or provide a finished 3D game engine.
+OW Engine is an early-stage, **headless-first** 2D/3D game-engine project written in OW. The current milestones implement deterministic game state, an extensible entity-component system (ECS) and fixed-step gameplay systems; the engine does **not** yet render a world, simulate physics, or provide a finished 3D game engine.
 
 ## Current capabilities
 
 - **Entities:** unique monotonic entity IDs, names, lifecycle and integer 3D positions.
 - **Scenes:** multiple named scenes, active-scene switching, entity membership, independent tick counters.
 - **Runtime:** fixed-step simulation in milliseconds, with a catch-up cap to avoid unlimited work after a stalled frame.
-- **flOW:** independently registered entity, scene and runtime modules, service contracts, dependency-ordered startup and shutdown.
+- **Components (ECS):** per-entity component stores, custom registered types, transform (position / rotation / scale) and velocity components.
+- **Systems:** insertion-ordered gameplay systems, enable/disable controls, scene-local movement in units/second, and automatic fixed-tick execution.
+- **flOW:** independently registered entity, scene, component, system and runtime modules, service contracts, dependency-ordered startup and shutdown.
 - **OW Graphics:** an explicitly SHA-pinned source dependency, with a GPU-free integration test using its real headless rendering contract.
 - **Tests:** native OW assertions for lifecycle, scene isolation, entity invalidation, fixed-step logic and graphics-service compatibility.
 
@@ -24,6 +26,8 @@ OW game / OWCraft (future)
 OW Engine
   entities     - stable IDs, names and positions
   scenes       - named scenes and entity membership
+  components   - entity-bound component type stores
+  systems      - per-tick gameplay systems (MovementSystem)
   runtime      - fixed-step deterministic simulation
   modules      - flOW lifecycle and service contracts
    |
@@ -47,6 +51,9 @@ ow check tests/headless_engine.ow
 ow run tests/headless_engine.ow
 ow check tests/headless_graphics.ow
 ow run tests/headless_graphics.ow
+ow check tests/headless_ecs.ow
+ow run tests/headless_ecs.ow
+ow run examples/ecs_motion/main.ow
 ```
 
 For a source-built compiler, replace `ow` with `java -jar /path/to/ow-lang/target/OwIDE.jar`.
@@ -78,14 +85,39 @@ main:
   call: app.stop()
 ```
 
-See [Architecture and roadmap](docs/ARCHITECTURE.md) and the executable [headless demo](src/main.ow) for working entry points.
+See [Architecture and roadmap](docs/ARCHITECTURE.md), the initial [headless demo](src/main.ow), and the [ECS movement demo](examples/ecs_motion/main.ow).
+
+## ECS: movement and components
+
+The new modules are opt-in to preserve compatibility with phase 1. A game composition root registers `EngineComponentsModule` and `EngineSystemsModule` with flOW alongside the original three modules. Then:
+
+```ow
+set components: app.service("components")
+set scenes: app.service("scenes")
+set systems: app.service("systems")
+set runtime: app.service("runtime")
+call: scenes.attach_components(components)
+call: runtime.attach_systems(systems, components)
+call: systems.register(new MovementSystem())
+call: scenes.add_scene("world")
+set player int: scenes.spawn("player")
+call: components.set_transform(player, 0, 0, 0)
+call: components.set_velocity(player, 125, 0, 0)
+call: runtime.update(16)
+```
+
+Here the player moves 2 world units on the x-axis in a single 16 ms tick. A game can register additional component types with `components.register_type("health")`, store values through `put/get/has/remove`, and add custom systems implementing `EngineSystem`. Destruction through `scenes.destroy(id)` cleans up every registered component for that entity.
+
+The component registry mirrors ECS transform positions into the legacy entity position fields, preserving older clients. Direct writes to `EntityStore.set_position` do not automatically update already-created TransformComponents; use `components.set_transform` for ECS entities.
 
 ## Scope and limitations
 
 - Entity storage: 256 lifetime allocations per store (no slot reuse yet).
 - Scene storage: 32 named scenes, 128 entity IDs per scene.
-- Positions are integer coordinates in this first iteration. No rotations or physics yet.
-- Fixed-step loop advances scene counters only; gameplay systems will be added later.
+- EntityStore still exposes its original positions; ECS TransformComponent additionally supports numeric position, rotation and scale. Transform hierarchy, parenting and physics are not implemented.
+- Component data is bounded to the same 256 lifetime entity IDs; currently 32 component types and 32 systems can be registered.
+- Fixed-step systems execute deterministically only if attached; the original scene-counter-only loop remains compatible.
+- The ECS component registry is currently in-memory, without save/load serialization.
 - OW's Java-hosted interpreter runs this foundation; this is **not** native-AOT gameplay code.
 - OW Graphics GPU integration, interactive game window and 3D draw submission are future integration milestones.
 

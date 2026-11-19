@@ -1,0 +1,15 @@
+# Real interactive OW Engine + OW Graphics 3D preview.
+# Arrow-key camera controls are future work. W/A/S/D moves ECS player camera.
+import "GpuScene.ow"
+
+main:
+  set game: new GpuScene()
+  call: assert(game.start() == 1)
+  print: "OW Engine voxel preview: move camera with WASD, ESC to exit"
+  while: game.is_running() == 1
+    call: game.poll()
+    call: game.update_controls()
+    if: game.is_running() == 1
+      call: assert(game.render() == 2, "two 3D textured ECS cubes")
+      call: game.present()
+  call: assert(game.stop() == 1)

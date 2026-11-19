@@ -100,3 +100,8 @@ Each new feature should include an OW example, headless tests, proper flOW servi
 ## Phase 2c (PR #4): ECS-to-Graphics adapter
 
 The new `EngineRenderModule` declares flOW dependencies on `scenes`, `components`, `transforms`, `shader` and `multi_scene`. `RenderWorld` stores non-owning mesh handle mappings and submits active-scene meshes through OW Graphics. `WorldMatrices` computes parent-first T * Ry * S hierarchy transforms with Graphics.Transforms, while the legacy ECS world-position function remains translation-only for backwards compatibility. GPU ownership remains with OW Graphics; see [RENDER-WORLD.md](RENDER-WORLD.md). Current limits: only Y Euler rotation, no real OpenGL framebuffer validation of the integrated engine, and no automatic mesh/texture ownership.
+
+
+## Phase 3a (PR #5): GPU-backed OW game preview
+
+`examples/voxel_preview` is a proof of end-to-end rendering from OW Engine ECS through Graphics.OpenGLRenderer, with a GLFW window, perspective camera, real cube mesh and RGBA texture, and direct framebuffer verification on Mesa/Xvfb. All GPU resources remain owned by Graphics. `GpuScene` is example application composition, not a reusable engine service. Real chunk meshing, input actions, collision and camera smoothing are deferred.
